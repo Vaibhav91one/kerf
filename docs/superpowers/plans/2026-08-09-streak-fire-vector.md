@@ -15,26 +15,26 @@
 **Files:**
 - Create in Figma file `VdPEaCxSvkLqEKibE5qpRE`: page `Assets — Streak Fire`, component `Illustration / Streak Fire`
 
-- [ ] **Step 1: Search the design system**
+- [x] **Step 1: Search the design system**
 
 Search the target file for an existing streak-fire asset or relevant semantic color variables. Reuse a suitable match only if one exists.
 
-- [ ] **Step 2: Create the isolated page and component**
+- [x] **Step 2: Create the isolated page and component**
 
 Use `figma.createPage()` only when `Assets — Streak Fire` does not already exist. Create a transparent 64 × 64 component named `Illustration / Streak Fire`.
 
-- [ ] **Step 3: Build editable vector paths**
+- [x] **Step 3: Build editable vector paths**
 
 Create a rounded outer flame, inner flame, and spark as separate named vector nodes. Use warm orange, amber, and pale-gold fills with no text, raster images, or heavy effects.
 
-- [ ] **Step 4: Verify document structure**
+- [x] **Step 4: Verify document structure**
 
 Read the new page metadata and confirm the component and its named vector children exist at 64 × 64.
 
-- [ ] **Step 5: Verify the rendering**
+- [x] **Step 5: Verify the rendering**
 
 Capture the component at high resolution and visually confirm that it reads as a flame, remains balanced in the square, and has clean edges on a transparent background.
 
-- [ ] **Step 6: Record completion**
+- [x] **Step 6: Record completion**
 
 Update this plan's checkboxes and commit the completed plan document without staging unrelated workspace files.
