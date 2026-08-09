@@ -1,0 +1,8 @@
+node_modules/
+.zerops-token
+.env
+.env.*
+dist/
+*.log
+.DS_Store
+.claude/

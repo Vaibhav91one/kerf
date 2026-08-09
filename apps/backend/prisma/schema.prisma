@@ -1,0 +1,125 @@
+// Kerf backend schema — kerf-spec.md §9, trimmed to tonight's scope.
+//
+// ponytail: no persisted `season` table tonight. Tier cuts are computed live
+// from qualifying session_metrics rows in GET /api/season/current via
+// @kerf/shared's tierCuts(). Add a persisted, closed-out Season row when a
+// season needs to survive past its own month (cron close-out, historical
+// ghosts) — see spec §7.6 and §9.
+//
+// No `event` table by design: raw events never leave the user's machine
+// (privacy invariant, spec §6). The server only ever sees a SessionMetric.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model SessionMetric {
+  // Composite id, not a bare sessionId: sessions are namespaced per owner so
+  // one account can never upsert over another account's row by guessing a UUID.
+  handle      String   @map("handle")
+  sessionId   String   @map("session_id")
+  source      String   @default("claude-code")
+  projectHash String   @map("project_hash")
+  startedMs   BigInt   @map("started_ms")
+  endedMs     BigInt   @map("ended_ms")
+  turns       Int
+  edits       Int
+  editsRework Int      @map("edits_rework")
+  reworkRatio Float?   @map("rework_ratio")
+  qualifies   Boolean
+  // Counts per tool/skill name — identifiers only, never prompt text (§6).
+  // Powers the dashboard's usage histogram (GET /api/me/sessions).
+  toolCounts  Json     @default("{}") @map("tool_counts")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  owner Profile @relation(fields: [handle], references: [handle], onDelete: Cascade)
+
+  @@id([handle, sessionId])
+  @@index([qualifies, startedMs])
+  @@index([handle, startedMs])
+  @@map("session_metrics")
+}
+
+// --- Path B: user-authored, deliberately published content -------------------
+//
+// Everything below stores free text, which is NOT a weakening of §6. §6 governs
+// transcript-DERIVED data (SessionMetric above), which stays hashes/enums/
+// numbers forever. These rows hold values a human typed into a form and chose
+// to publish. See packages/shared/src/social.ts for the length caps and the
+// control-character/bidi stripping every value passes through before it lands
+// here. No code path may populate any of these columns from a transcript.
+
+model Profile {
+  handle      String  @id
+  displayName String  @map("display_name")
+  bio         String?
+  // Opt-in: skill names are §6-safe to store, which is a different question
+  // from being safe to show strangers. Default off.
+  publicSkills Boolean @default(false) @map("public_skills")
+  // sha256 of the account's CLI token. The raw token is shown once, at
+  // creation, and never stored — a leaked DB dump must not be a set of keys.
+  tokenHash   String   @unique @map("token_hash")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  sessions SessionMetric[]
+  projects Project[]
+  messages ChatMessage[]
+  live     LiveSession[]
+
+  @@map("profiles")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  handle      String
+  name        String
+  description String?
+  repoUrl     String?  @map("repo_url")
+  // Optional bridge to the telemetry side: a derived hash, associated with an
+  // authored name only because the person who owns both said so.
+  projectHash String?  @map("project_hash")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  owner Profile @relation(fields: [handle], references: [handle], onDelete: Cascade)
+
+  @@index([handle])
+  @@map("projects")
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  handle    String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  author Profile @relation(fields: [handle], references: [handle], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@map("chat_messages")
+}
+
+// Ephemeral by intent: rows are overwritten by each heartbeat and are only
+// "live" while lastBeatMs is fresh (LIVE_TTL_MS in shared/social.ts). Nothing
+// here describes what the work is — only that it is happening, and how it goes.
+model LiveSession {
+  handle      String
+  sessionId   String  @map("session_id")
+  projectId   String? @map("project_id")
+  startedMs   BigInt  @map("started_ms")
+  lastBeatMs  BigInt  @map("last_beat_ms")
+  turns       Int
+  edits       Int
+  editsRework Int     @map("edits_rework")
+  reworkRatio Float?  @map("rework_ratio")
+
+  owner Profile @relation(fields: [handle], references: [handle], onDelete: Cascade)
+
+  @@id([handle, sessionId])
+  @@index([lastBeatMs])
+  @@map("live_sessions")
+}
