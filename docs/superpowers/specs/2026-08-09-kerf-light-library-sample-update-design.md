@@ -2,14 +2,15 @@
 
 ## Objective
 
-Update the existing Figma page `00 — Visual Direction Sample` in design file
-`VdPEaCxSvkLqEKibE5qpRE` from its dark-first direction to a light-only, premium product-platform
-direction. The existing `Wireframes — low-fi` page, its nine route frames, the three-page FigJam
-board, and every other Figma file remain untouched.
+Create a new Figma page named `01 — Light Platform Direction` in design file
+`VdPEaCxSvkLqEKibE5qpRE`. The new page translates the approved sample structure into a light-only,
+premium product-platform direction. The existing `00 — Visual Direction Sample` page is retained
+exactly as the dark-direction reference. The `Wireframes — low-fi` page, its nine route frames, the
+three-page FigJam board, and every other Figma file also remain untouched.
 
-This remains a visual-direction sample rather than the production component library. It must show
-enough foundations, assets, component specimens, and real screen context to approve the direction
-before the nine wireframes are converted.
+This new page remains a visual-direction sample rather than the production component library. It
+must show enough foundations, assets, component specimens, and real screen context to compare the
+light and dark directions before the nine wireframes are converted.
 
 ## Approved direction
 
@@ -78,7 +79,7 @@ generic 3D objects cannot communicate their exact progression or earning conditi
 
 ## Layout and surface system
 
-- Presentation board remains 1,600 px wide with seven vertically separated sections.
+- The new presentation board is 1,600 px wide with seven vertically separated sections.
 - Section containers become white with 24 px corners, a one-pixel border, and a low-opacity soft
   shadow. The board background becomes warm ivory.
 - Application excerpts use white navigation and content surfaces over a soft neutral canvas.
@@ -150,7 +151,8 @@ provenance note naming Khagwal 3D and the CC0 license.
 
 ## Acceptance criteria
 
-- The sample page is entirely light themed; no dark application or presentation surfaces remain.
+- The new `01 — Light Platform Direction` page is entirely light themed; no dark application or
+  presentation surfaces remain on that page.
 - Every large illustration comes from the approved Khagwal 3D Figma Community library.
 - Library assets are visibly consistent in theme and angle and have semantic layer names.
 - Interface icons remain coherent at 24 px and are not replaced by 3D artwork.
@@ -158,4 +160,7 @@ provenance note naming Khagwal 3D and the CC0 license.
 - Small text and controls meet WCAG AA contrast.
 - The page has no missing fonts, clipped text, overlaps, or direct-child overflow.
 - The original wireframe page still contains 20 top-level nodes and nine frames.
+- The original `00 — Visual Direction Sample` page and its seven-section board are unchanged.
+- The design file contains the wireframe page, the retained dark sample page, and the new light
+  direction page.
 - The FigJam file and all other Figma files remain unchanged.
