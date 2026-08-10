@@ -45,6 +45,7 @@ zerops:
         COREPACK_NPM_REGISTRY: https://registry.npmmirror.com
         NEXT_PUBLIC_API_URL: https://backend-2cf9-3000.prg1.zerops.app
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_c2tpbGxlZC1qYWd1YXItNTkuY2xlcmsuYWNjb3VudHMuZGV2JA
+        CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
     run:
       base: nodejs@22
       ports:
@@ -52,4 +53,5 @@ zerops:
           httpSupport: true
       envVariables:
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_c2tpbGxlZC1qYWd1YXItNTkuY2xlcmsuYWNjb3VudHMuZGV2JA
+        CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       start: sh -c 'cd apps/frontend && pnpm start'
