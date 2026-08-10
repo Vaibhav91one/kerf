@@ -84,22 +84,22 @@ function LegacyAuthProvider({ children }: { children: ReactNode }) {
 }
 
 function ClerkBackedAuthProvider({ children }: { children: ReactNode }) {
-  const clerk = useClerkAuth();
+  const { isLoaded, isSignedIn, getToken } = useClerkAuth();
   const [auth, setAuth] = useState<Auth | null>(null);
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async (): Promise<Auth | null> => {
-    if (!clerk.isLoaded) {
+    if (!isLoaded) {
       setReady(false);
       return null;
     }
-    if (!clerk.isSignedIn) {
+    if (!isSignedIn) {
       setAuth(null);
       setReady(true);
       return null;
     }
 
-    const token = await clerk.getToken();
+    const token = await getToken();
     if (!token) {
       setAuth(null);
       setReady(true);
@@ -121,7 +121,7 @@ function ClerkBackedAuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setReady(true);
     }
-  }, [clerk]);
+  }, [getToken, isLoaded, isSignedIn]);
 
   useEffect(() => {
     void refresh();
@@ -150,7 +150,7 @@ function ClerkBackedAuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ auth, ready, signedIn: clerk.isSignedIn === true, clerkEnabled: true, connect, refresh, disconnect }}>
+    <AuthContext.Provider value={{ auth, ready, signedIn: isSignedIn === true, clerkEnabled: true, connect, refresh, disconnect }}>
       {children}
     </AuthContext.Provider>
   );

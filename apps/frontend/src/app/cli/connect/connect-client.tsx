@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { SignInButton, UserButton, useAuth as useClerkAuth, useUser } from '@clerk/nextjs';
+import { SignInButton, useAuth as useClerkAuth, useUser } from '@clerk/nextjs';
+import { useRouter } from 'next/navigation';
 import { LIMITS } from '@kerf/shared';
 import { api, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -10,12 +11,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 export function CliConnectClient({ code }: { code: string }) {
+  const router = useRouter();
   const { isLoaded, isSignedIn, getToken } = useClerkAuth();
   const { user } = useUser();
   const [handle, setHandle] = useState('');
   const [displayName, setDisplayName] = useState(user?.fullName ?? user?.firstName ?? '');
   const [hasProfile, setHasProfile] = useState(false);
-  const [claimed, setClaimed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -46,7 +47,7 @@ export function CliConnectClient({ code }: { code: string }) {
     try {
       const token = await tokenOrThrow();
       await api.claimCliLogin(token, code);
-      setClaimed(true);
+      router.replace('/me?cli=connected');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to connect CLI');
     } finally {
@@ -99,20 +100,6 @@ export function CliConnectClient({ code }: { code: string }) {
           <SignInButton mode="modal">
             <Button>Continue with Google</Button>
           </SignInButton>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (claimed) {
-    return (
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>CLI connected</CardTitle>
-          <CardDescription>You can close this tab and return to your terminal.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <UserButton />
         </CardContent>
       </Card>
     );
