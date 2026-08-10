@@ -41,9 +41,11 @@ edit it.
   component set and every `ui/*` primitive inherits the palette. Icons live in
   `components/kerf/icons.tsx` (exported path data, `currentColor`); league crests, badges, avatars
   and illustrations are files under `public/kerf/` and are never recoloured. Routes: `/`, `/live`,
-  `/u/[handle]`, `/people`, `/skills`, `/projects`, `/me`, `/season`, `/insights`. `/people` is the
-  rail's People entry — the board draws the profile screen as its destination and no index, so the
-  directory is deliberately plain. Do not invent routes beyond these. Public-first: no frontend
+  `/people`, `/people/[handle]`, `/skills`, `/projects`, `/me`, `/season`, `/insights`. A profile
+  lives at `/people/[handle]`; `/u/[handle]` stays as a redirect so links minted before the move
+  keep working. `/people` itself is the rail's People entry — the board draws the profile screen as
+  its destination and no index, so the directory is deliberately plain. Do not invent routes beyond
+  these. Public-first: no frontend
   Clerk proxy/middleware; sign-in is needed only for `/me`, CLI connect, and mutating actions.
 
 Run `pnpm install` once at the root. `pnpm -r typecheck` / `pnpm -r test` run across all packages.
