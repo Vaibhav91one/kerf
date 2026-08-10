@@ -571,3 +571,35 @@ shell:
   Postgres access. `zcli vpn up` wants wireguard's `wg-quick` plus sudo, so this
   is a GUI console or a local `wg` install away. Note `me` is re-seeded at boot
   whenever `KERF_TOKEN` is set, so clearing it means clearing that secret too.
+
+### Production Clerk secret does not match the frontend's instance
+
+Found while trying to claim a handle on the live dashboard. The claim failed
+with `not signed in`, and the cause is not the session:
+
+- `window.Clerk.session` is active until 2026-08-17 and `getToken()` returns a
+  valid JWT.
+- That token's `iss` is `https://skilled-jaguar-59.clerk.accounts.dev`, which is
+  exactly the instance the deployed publishable key
+  (`pk_test_c2tpbGxlZC1qYWd1YXItNTku…`) points at, so frontend and publishable
+  key agree.
+- Posting that token to `GET /api/clerk/me` still returns 401 `not signed in`,
+  which is `clerkMiddleware` failing to verify a well-formed token from the
+  right issuer. That only happens when `CLERK_SECRET_KEY` belongs to a
+  different Clerk application.
+
+Consequence: every Clerk-authenticated route is unreachable in production —
+claiming a handle, `POST /api/clerk/profile`, and the `kerf login` claim step.
+`kerf login` will start and then never complete. The earlier "Clerk mode
+smoke-tested" note only ever proved the secret was *present* (an unauthenticated
+call returning 401 rather than 503); it never proved the key pair matched.
+
+Fix: copy the secret key for the `skilled-jaguar-59` instance from the Clerk
+dashboard into the project's `CLERK_SECRET_KEY`, then redeploy the backend.
+`/api/clerk/me` with a live session token should answer 200 instead of 401.
+
+Separately: deploying master's zerops.yml had removed `CLERK_SECRET_KEY` from
+the backend run environment entirely, which took the same routes to 503
+"clerk not configured". The project-environment reference is restored in
+79f7f06; if service-scoped secrets are still the goal, wire the secret onto the
+backend service first and drop the line again afterwards.
