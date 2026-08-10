@@ -32,11 +32,14 @@ edit it.
   design (privacy: raw events never leave the user's machine). Tables: `session_metrics`,
   `profiles`, `api_tokens`, `live_sessions`, `projects`, `chat_messages`, `skills_library`,
   `skill_stars` — no persisted `season` (tier cuts computed live). Real-time is SSE
-  (`GET /api/live/stream`), fanned out by an in-process `EventEmitter` in `src/live.ts`.
+  (`GET /api/live/stream`), fanned out by an in-process `EventEmitter` in `src/live.ts`. RBAC is
+  route-local in `src/index.ts`: public reads stay public, Clerk session routes manage browser
+  account lifecycle, and member routes derive ownership from Clerk/API tokens only.
 - `apps/frontend` — Next.js dashboard. **Gate cleared 2026-08-09**: Tailwind + shadcn/ui with the
   `sidebar-07` shell, SUSE + SUSE Mono type. Nine wireframed routes (`/`, `/live`, `/u/[handle]`,
   `/skills`, `/projects`, `/me`, `/season`, `/insights`, plus the empty state) — see `BUILD_LOG.md`
-  for the file link. Do not invent routes beyond them.
+  for the file link. Public-first: no frontend Clerk proxy/middleware; users can explore first and
+  sign in only for `/me`, CLI connect, and mutating actions. Do not invent routes beyond them.
 
 Run `pnpm install` once at the root. `pnpm -r typecheck` / `pnpm -r test` run across all packages.
 
@@ -88,8 +91,8 @@ run — re-run `node apps/cli/src/index.ts` to refresh). The backend is verified
 Postgres end-to-end (`scripts/e2e.mjs` — needs `scripts/db.sh up` and a booted server): SSE fan-out, per-account token auth, the
 cross-account overwrite guard, chat rate limiting, and both privacy gates rejecting a smuggled
 free-text field. Clerk mode is smoke-tested locally: `/api/cli-login/start` returns a pending login,
-and unauthenticated claim returns 401 rather than silently falling back. The production frontend is
-built and deployed on Zerops.
+unauthenticated claim returns 401 rather than silently falling back, and the frontend production
+build has no Proxy/Middleware entry. The production frontend is built and deployed on Zerops.
 
 ## Diagrams and wireframes
 

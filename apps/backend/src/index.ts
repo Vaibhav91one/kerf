@@ -4,7 +4,7 @@ import express from 'express';
 import type { SessionMetric } from '@kerf/shared';
 import { tierCuts, tierForValue, improvementTips, badges, currentStreak, tierProgress, LIVE_TTL_MS } from '@kerf/shared';
 import { prisma } from './db.ts';
-import { bearerAuth, clerkAuth, getClerkUserId, seedEnvProfile, tokenHash, type AuthedRequest } from './auth.ts';
+import { getClerkUserId, requireClerkSession, requireMember, seedEnvProfile, tokenHash, type AuthedRequest } from './auth.ts';
 import {
   validateSessionMetric,
   validateHeartbeat,
@@ -33,6 +33,15 @@ const clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? process.env.NEX
 if (process.env.CLERK_SECRET_KEY && clerkPublishableKey) app.use(clerkMiddleware({ publishableKey: clerkPublishableKey }));
 app.use(express.json({ limit: '1mb' }));
 
+// Route RBAC contract:
+// - Public read: health, season, live stream/sessions, profiles, public projects,
+//   skill library, chat history, and CLI login polling/start.
+// - Public telemetry mutation: skill install-count bump. It changes only an
+//   aggregate public counter, not account ownership or private data.
+// - Clerk session: browser account lifecycle and CLI login claim.
+// - Member: owner-scoped mutations/private reads. The authenticated handle is
+//   always derived from Clerk/API token, never from request bodies.
+
 // --- Path A: telemetry -------------------------------------------------------
 
 function toRow(handle: string, m: SessionMetric) {
@@ -52,7 +61,7 @@ function toRow(handle: string, m: SessionMetric) {
   };
 }
 
-app.post('/api/metrics', bearerAuth, async (req: AuthedRequest, res) => {
+app.post('/api/metrics', requireMember, async (req: AuthedRequest, res) => {
   const handle = req.handle as string;
   const body: unknown = req.body;
   if (!Array.isArray(body)) {
@@ -101,7 +110,7 @@ app.post('/api/metrics', bearerAuth, async (req: AuthedRequest, res) => {
  * timestamps — so a live tile can say "someone is 12 edits into a session going
  * well" without saying anything about what they are building.
  */
-app.post('/api/heartbeat', bearerAuth, async (req: AuthedRequest, res) => {
+app.post('/api/heartbeat', requireMember, async (req: AuthedRequest, res) => {
   const handle = req.handle as string;
   const result = validateHeartbeat(req.body);
   if (!result.ok) {
@@ -187,7 +196,7 @@ function chatAllowed(handle: string, nowMs: number): boolean {
   return true;
 }
 
-app.post('/api/chat', bearerAuth, async (req: AuthedRequest, res) => {
+app.post('/api/chat', requireMember, async (req: AuthedRequest, res) => {
   const handle = req.handle as string;
   const result = validateChatInput(req.body);
   if (!result.ok) {
@@ -297,13 +306,13 @@ app.post('/api/profiles', async (req, res) => {
   res.status(201).json({ handle, token });
 });
 
-app.get('/api/clerk/me', clerkAuth, async (req: AuthedRequest, res) => {
+app.get('/api/clerk/me', requireClerkSession, async (req: AuthedRequest, res) => {
   const clerkUserId = req.clerkUserId as string;
   const profile = await prisma.profile.findUnique({ where: { clerkUserId } });
   res.json({ profile: profile ? profileJson(profile) : null });
 });
 
-app.post('/api/clerk/profile', clerkAuth, async (req: AuthedRequest, res) => {
+app.post('/api/clerk/profile', requireClerkSession, async (req: AuthedRequest, res) => {
   const clerkUserId = req.clerkUserId as string;
   const existing = await prisma.profile.findUnique({ where: { clerkUserId } });
   const result = validateProfileInput(existing ? { ...req.body, handle: existing.handle } : req.body);
@@ -332,19 +341,6 @@ app.post('/api/clerk/profile', clerkAuth, async (req: AuthedRequest, res) => {
   res.status(existing ? 200 : 201).json({ profile: profileJson(profile) });
 });
 
-app.post('/api/clerk/api-token', clerkAuth, async (req: AuthedRequest, res) => {
-  const profile = await prisma.profile.findUnique({
-    where: { clerkUserId: req.clerkUserId as string },
-    select: { handle: true },
-  });
-  if (!profile) {
-    res.status(409).json({ error: 'profile required' });
-    return;
-  }
-  const token = await mintApiToken(profile.handle, 'dashboard session');
-  res.json({ handle: profile.handle, token });
-});
-
 app.post('/api/cli-login/start', (_req, res) => {
   pruneCliLogins();
   const code = randomBytes(18).toString('base64url');
@@ -369,7 +365,7 @@ app.get('/api/cli-login/:code', (req, res) => {
   res.json({ status: 'claimed', handle: session.handle, token: session.token });
 });
 
-app.post('/api/cli-login/:code/claim', clerkAuth, async (req: AuthedRequest, res) => {
+app.post('/api/cli-login/:code/claim', requireClerkSession, async (req: AuthedRequest, res) => {
   pruneCliLogins();
   const code = req.params.code as string;
   const session = cliLogins.get(code);
@@ -398,7 +394,7 @@ app.post('/api/cli-login/:code/claim', clerkAuth, async (req: AuthedRequest, res
   res.json({ status: 'claimed', handle: profile.handle });
 });
 
-app.patch('/api/me/profile', bearerAuth, async (req: AuthedRequest, res) => {
+app.patch('/api/me/profile', requireMember, async (req: AuthedRequest, res) => {
   const handle = req.handle as string;
   const result = validateProfileInput({ ...req.body, handle });
   if (!result.ok) {
@@ -545,7 +541,7 @@ function toProjectJson(p: {
   };
 }
 
-app.post('/api/projects', bearerAuth, async (req: AuthedRequest, res) => {
+app.post('/api/projects', requireMember, async (req: AuthedRequest, res) => {
   const handle = req.handle as string;
   const result = validateProjectInput(req.body);
   if (!result.ok) {
@@ -633,7 +629,7 @@ function toSkillJson(s: {
 
 const SKILL_INCLUDE = { _count: { select: { stars: true as const } } };
 
-app.post('/api/skill-library', bearerAuth, async (req: AuthedRequest, res) => {
+app.post('/api/skill-library', requireMember, async (req: AuthedRequest, res) => {
   const handle = req.handle as string;
   const result = validateSkillInput(req.body);
   if (!result.ok) {
@@ -710,7 +706,7 @@ app.get('/api/skill-library/by-slug/:slug', async (req, res) => {
   res.json({ ...toSkillJson(row), isStarredByMe });
 });
 
-app.post('/api/skill-library/:id/star', bearerAuth, async (req: AuthedRequest, res) => {
+app.post('/api/skill-library/:id/star', requireMember, async (req: AuthedRequest, res) => {
   const handle = req.handle as string;
   const skillId = req.params.id as string;
   const existing = await prisma.skillStar.findUnique({ where: { skillId_handle: { skillId, handle } } });
@@ -770,7 +766,7 @@ function rowToMetric(r: {
 // User dashboard (numbers-only, spec §6): own session history, a tool-usage
 // histogram, and threshold-triggered tips — all derived from numbers already
 // in SessionMetric, nothing read from prompt/tool-argument content.
-app.get('/api/me/sessions', bearerAuth, async (req: AuthedRequest, res) => {
+app.get('/api/me/sessions', requireMember, async (req: AuthedRequest, res) => {
   const handle = req.handle as string;
   const rows = await prisma.sessionMetric.findMany({ where: { handle }, orderBy: { startedMs: 'desc' } });
   const metrics = rows.map(rowToMetric);

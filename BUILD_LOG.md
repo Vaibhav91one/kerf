@@ -404,8 +404,8 @@ kerf login
   → kerf sync/live use stored auth automatically
 ```
 
-- `apps/frontend`: added `@clerk/nextjs`, `src/proxy.ts`, `ClerkProvider`, `/cli/connect`, and
-  Clerk-backed `/me` profile connect/update flow. The UI keeps the Material 3/SUSE/sidebar shell.
+- `apps/frontend`: added `@clerk/nextjs`, `ClerkProvider`, `/cli/connect`, and Clerk-backed `/me`
+  profile connect/update flow. The UI keeps the Material 3/SUSE/sidebar shell.
 - `apps/backend`: added `@clerk/express`; `profiles.clerk_user_id`; `api_tokens` table; Clerk-only
   profile upsert; and a 10-minute CLI login handshake:
   `POST /api/cli-login/start`, `GET /api/cli-login/:code`, `POST /api/cli-login/:code/claim`.
@@ -414,8 +414,8 @@ kerf login
 - `apps/cli`: added `kerf login`, `kerf logout`, `kerf whoami`, local config storage, browser-open
   fallback printing, and config-backed `sync`/`live` auth. Manual `KERF_TOKEN` still works as an
   override for dev/compatibility.
-- Zerops project env now has the Kerf Clerk app keys as project-level variables, inherited by
-  frontend build/runtime and backend runtime.
+- Zerops project env now has the Kerf Clerk app keys as project-level variables. Backend runtime
+  receives the Clerk secret; frontend build/runtime receives only the public publishable key.
 
 Local verification before deploy:
 
@@ -426,6 +426,42 @@ Local verification before deploy:
 - Local Clerk smoke: `/api/cli-login/start` returns pending; unauthenticated claim returns 401
   `not signed in` (proves Clerk middleware is configured) instead of 503/500.
 
+### Public-first Clerk/RBAC fix
+
+User clarified that visitors must land on Home first, explore the platform publicly, then sign in
+only when they choose to claim/publish/sync. The previous frontend `src/proxy.ts` installed Clerk
+server middleware over frontend routes, which was unnecessary for the client-side Clerk modal flow
+and had already produced production handshake failures when the frontend tried to verify Clerk
+server tokens.
+
+Changes:
+
+- Deleted `apps/frontend/src/proxy.ts`. Frontend now has **no Proxy/Middleware entry** after a clean
+  `rm -rf apps/frontend/.next && next build`; public pages are not gated by Clerk server middleware.
+- Removed `CLERK_SECRET_KEY` from the frontend Zerops service. Frontend needs only the public
+  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`; the backend remains the only service with the Clerk secret.
+- Backend RBAC is explicit in route names/comments:
+  - public read: health, season, live sessions/stream, profiles, projects, skill library, skills
+    leaderboard, chat history, CLI login start/poll.
+  - public telemetry mutation: skill install-count bump only (aggregate public counter).
+  - Clerk session: browser account lifecycle + CLI login claim.
+  - member: telemetry upload, heartbeat, chat post, profile update, project/skill publish/star, own
+    sessions. Ownership always comes from Clerk/API token, never request body fields.
+- Removed unused `POST /api/clerk/api-token` and the matching frontend API client method so CLI
+  tokens are issued through one path: `kerf login`.
+- Home empty state now shows the current flow: `kerf login`, `kerf sync`, `kerf live`, plus public
+  exploration/sign-in CTAs.
+
+Verification:
+
+- `pnpm -r typecheck` clean.
+- `pnpm -r test` clean: 39/39 shared, 33/33 backend, 1/1 CLI.
+- Clean production frontend build with only public Clerk env clean; only warning is the existing
+  SUSE Mono fallback-metrics warning.
+- Live backend pre-deploy smoke still healthy: `/health` 200, `/api/season/current` 200,
+  `POST /api/cli-login/start` 201.
+
 ### Next
 
-- Commit, push, redeploy backend + frontend, then verify live Clerk Google sign-in and `kerf login`.
+- Commit, push, redeploy backend + frontend, then verify live public pages, Clerk Google sign-in,
+  and `kerf login`.

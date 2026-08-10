@@ -14,6 +14,7 @@ export function tokenHash(token: string): string {
 // The authenticated handle rides on the request. Declared here rather than in a
 // global .d.ts so the coupling stays visible at the point of use.
 export type AuthedRequest = Request & { handle?: string; clerkUserId?: string };
+export type KerfRole = 'public' | 'member' | 'clerk-session';
 
 function readBearer(req: Request): string | null {
   const parts = (req.header('authorization') ?? '').split(' ');
@@ -95,6 +96,12 @@ export function clerkAuth(req: AuthedRequest, res: Response, next: NextFunction)
   req.clerkUserId = clerkUserId;
   next();
 }
+
+// RBAC names used by route declarations. `requireMember` accepts either a
+// browser Clerk session already linked to a profile or a Kerf CLI/API token.
+// `requireClerkSession` is only for browser account lifecycle endpoints.
+export const requireMember = bearerAuth;
+export const requireClerkSession = clerkAuth;
 
 /**
  * Seeds the account named by KERF_TOKEN/KERF_HANDLE so the existing single-user

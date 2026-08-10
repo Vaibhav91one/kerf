@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError, type LiveSessionJson, type MeSessions, type SeasonCurrent } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -47,12 +48,22 @@ export default function HomePage() {
       <Card className="max-w-xl">
         <CardHeader>
           <CardTitle>No sessions yet this season</CardTitle>
-          <CardDescription>Connect the Kerf CLI to your Claude Code projects to get started.</CardDescription>
+          <CardDescription>
+            Explore Kerf publicly, then sign in with Google when you want to publish your own profile, live sessions, projects, or skills.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 font-mono text-sm">
-          <p>$ npx @kerf/cli connect</p>
-          <p>$ kerf sync</p>
-          <p>$ kerf live</p>
+        <CardContent className="flex flex-col gap-4">
+          <div className="rounded-md border bg-muted/40 p-3 font-mono text-sm">
+            <p>$ kerf login</p>
+            <p>$ kerf sync</p>
+            <p>$ kerf live</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button render={<Link href="/me" />}>{auth ? 'Open profile' : 'Sign in when ready'}</Button>
+            <Button variant="outline" render={<Link href="/live" />}>
+              Explore live feed
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );

@@ -175,9 +175,6 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  issueClerkApiToken: (token: string) =>
-    request<{ handle: string; token: string }>('/api/clerk/api-token', { method: 'POST', token }),
-
   claimCliLogin: (token: string, code: string) =>
     request<{ status: 'claimed'; handle: string }>(`/api/cli-login/${encodeURIComponent(code)}/claim`, { method: 'POST', token }),
 
