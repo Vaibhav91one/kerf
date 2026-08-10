@@ -8,7 +8,7 @@ import { LIMITS } from '@kerf/shared';
 import { api, type LiveSessionJson, type ProjectJson } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { ProjectsIcon } from '@/components/kerf/icons';
-import { PageHeader, Panel, SectionLabel } from '@/components/kerf/ui';
+import { PageHeader, PageSkeleton, Panel, SectionLabel } from '@/components/kerf/ui';
 
 function Field({
   label,
@@ -28,7 +28,7 @@ function Field({
 }
 
 export default function ProjectsPage() {
-  const { auth } = useAuth();
+  const { auth, getToken } = useAuth();
   const [projects, setProjects] = useState<ProjectJson[] | null>(null);
   const [live, setLive] = useState<LiveSessionJson[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +47,9 @@ export default function ProjectsPage() {
     setBusy(true);
     setError(null);
     try {
-      const created = await api.createProject(auth.token, {
+      const token = await getToken();
+      if (!token) throw new Error('not signed in');
+      const created = await api.createProject(token, {
         name: String(data.get('name') ?? ''),
         description: String(data.get('description') ?? '') || undefined,
         repoUrl: String(data.get('repoUrl') ?? '') || undefined,
@@ -61,7 +63,7 @@ export default function ProjectsPage() {
     }
   }
 
-  if (!projects) return null;
+  if (!projects) return <PageSkeleton />;
   const liveFor = (id: string) => live.filter((s) => s.projectId === id).length;
 
   return (

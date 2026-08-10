@@ -167,6 +167,15 @@ if (command === 'sync') {
   }
   const skill = (await res.json()) as { slug: string; content: string };
 
+  // The install path is built from a value the server returned, so it is
+  // validated before it reaches join(): a slug containing `..` or a separator
+  // would otherwise write outside ~/.claude/skills. Same shape the backend
+  // generates in slugify().
+  if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(skill.slug)) {
+    console.error(`server returned an unsafe slug: ${JSON.stringify(skill.slug)}`);
+    process.exit(1);
+  }
+
   const dir = join(homedir(), '.claude', 'skills', skill.slug);
   mkdirSync(dir, { recursive: true });
   const dest = join(dir, 'SKILL.md');

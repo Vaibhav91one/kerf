@@ -15,7 +15,7 @@ import { api, type LiveSessionJson, type MeSessions } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { Illustration } from '@/components/kerf/artwork';
 import { TerminalIcon } from '@/components/kerf/icons';
-import { PageHeader, Panel, SectionLabel } from '@/components/kerf/ui';
+import { PageHeader, PageSkeleton, Panel, SectionLabel } from '@/components/kerf/ui';
 
 // Exactly the keys validate.ts accepts on POST /api/metrics. Kept in this order
 // so the list on screen and the schema-walk can be read side by side.
@@ -101,18 +101,18 @@ function ClaimHandle() {
 }
 
 export default function MePage() {
-  const { auth, ready, signedIn, clerkEnabled, refresh } = useAuth();
+  const { auth, ready, signedIn, clerkEnabled, refresh, getToken } = useAuth();
   const [me, setMe] = useState<MeSessions | null>(null);
   const [live, setLive] = useState<LiveSessionJson[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!auth) return;
-    api.mySessions(auth.token).then(setMe).catch(() => {});
+    void getToken().then((t) => (t ? api.mySessions(t).then(setMe) : null)).catch(() => {});
     api.liveSessions().then((r) => setLive(r.sessions)).catch(() => {});
-  }, [auth]);
+  }, [auth, getToken]);
 
-  if (!ready) return null;
+  if (!ready) return <PageSkeleton />;
 
   const mineLive = auth ? live.filter((s) => s.handle === auth.handle) : [];
   const lastBeat = mineLive.length > 0 ? Math.max(...mineLive.map((s) => s.lastBeatMs)) : null;
@@ -123,7 +123,9 @@ export default function MePage() {
     if (!auth) return;
     setSaving(true);
     try {
-      await api.updateMyProfile(auth.token, {
+      const token = await getToken();
+      if (!token) return;
+      await api.updateMyProfile(token, {
         displayName: auth.profile.displayName,
         bio: auth.profile.bio ?? undefined,
         publicSkills: next,

@@ -23,6 +23,32 @@ export function Panel({ children, className }: { children: ReactNode; className?
   return <section className={cn('rounded-[16px] border border-border bg-card px-[18px] py-5', className)}>{children}</section>;
 }
 
+/**
+ * Placeholder while a screen's first fetch is in flight. The comps draw no
+ * loading state, so this is deliberately the quietest thing that still holds
+ * the layout: the same surfaces at the same sizes, no invented numbers.
+ */
+export function PageSkeleton() {
+  return (
+    <div className="animate-pulse space-y-[28px]" aria-hidden>
+      <div className="space-y-[6px]">
+        <div className="h-[34px] w-[380px] rounded-[8px] bg-secondary" />
+        <div className="h-[20px] w-[620px] rounded-[8px] bg-secondary/70" />
+        <div className="pt-5">
+          <hr className="border-t border-border" />
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-5">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-[116px] rounded-[16px] border border-border bg-card" />
+        ))}
+      </div>
+      <div className="h-[220px] rounded-[16px] border border-border bg-card" />
+      <div className="h-[270px] rounded-[16px] border border-border bg-card" />
+    </div>
+  );
+}
+
 /** 260x116 metric tile — label, mono value, footnote, optional artwork at the right. */
 export function StatCard({
   label,

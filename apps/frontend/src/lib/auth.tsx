@@ -16,6 +16,13 @@ type AuthContextValue = {
   connect: (auth: { handle: string; token: string }) => void;
   refresh: () => Promise<Auth | null>;
   disconnect: () => void;
+  /**
+   * A token good right now. Clerk session JWTs expire about a minute after
+   * they are minted, so anything that calls the API must ask for one at call
+   * time — `auth.token` is a snapshot from mount and goes stale while the page
+   * sits open. Returns null when there is nothing to authenticate with.
+   */
+  getToken: () => Promise<string | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -76,6 +83,8 @@ function LegacyAuthProvider({ children }: { children: ReactNode }) {
         connect,
         refresh: async () => auth,
         disconnect,
+        // A stored CLI token does not expire, so the snapshot is the fresh value.
+        getToken: async () => auth?.token ?? null,
       }}
     >
       {children}
@@ -149,8 +158,26 @@ function ClerkBackedAuthProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  // Clerk mints short-lived session JWTs, so this asks for one per call rather
+  // than handing back the snapshot taken at mount.
+  const freshToken = useCallback(async () => {
+    if (!isLoaded || !isSignedIn) return null;
+    return getToken();
+  }, [getToken, isLoaded, isSignedIn]);
+
   return (
-    <AuthContext.Provider value={{ auth, ready, signedIn: isSignedIn === true, clerkEnabled: true, connect, refresh, disconnect }}>
+    <AuthContext.Provider
+      value={{
+        auth,
+        ready,
+        signedIn: isSignedIn === true,
+        clerkEnabled: true,
+        connect,
+        refresh,
+        disconnect,
+        getToken: freshToken,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

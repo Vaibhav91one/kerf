@@ -32,7 +32,8 @@ async function request<T>(path: string, init?: RequestInit & { token?: string })
 }
 
 export type Standing = {
-  avgReworkRatio: number | null;
+  /** §7.2 season score: the winsorised median of the player's qualifying sessions. */
+  score: number | null;
   tier: 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond' | null;
   progress: { next: string; pct: number } | null;
   sessionCount: number;
@@ -115,7 +116,8 @@ export type MeSessions = {
 
 export type SeasonStanding = {
   handle: string;
-  avgReworkRatio: number;
+  /** §7.2 season score: the winsorised median of this player's qualifying sessions. */
+  score: number;
   tier: Standing['tier'];
   sessionCount: number;
   /** Display-only, like sessionCount — the board is ordered on the ratio alone (§7.2). */

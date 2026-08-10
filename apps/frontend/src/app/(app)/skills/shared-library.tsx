@@ -39,7 +39,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 }
 
 function PublishForm({ onPublished }: { onPublished: (s: SkillJson) => void }) {
-  const { auth } = useAuth();
+  const { auth, getToken } = useAuth();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -53,7 +53,9 @@ function PublishForm({ onPublished }: { onPublished: (s: SkillJson) => void }) {
     setError(null);
     setBusy(true);
     try {
-      const skill = await api.createSkill(auth.token, { name, description: description || undefined, content });
+      const token = await getToken();
+      if (!token) throw new Error('not signed in');
+      const skill = await api.createSkill(token, { name, description: description || undefined, content });
       onPublished(skill);
       setOpen(false);
       setName('');
@@ -147,7 +149,7 @@ function SkillDetail({ skill, onClose }: { skill: SkillJson; onClose: () => void
 }
 
 export function SharedLibrary({ initialSkills }: { initialSkills: SkillJson[] }) {
-  const { auth } = useAuth();
+  const { auth, getToken } = useAuth();
   const [skills, setSkills] = useState(initialSkills);
   const [sort, setSort] = useState<'recent' | 'stars'>('recent');
   const [starred, setStarred] = useState<Set<string>>(
@@ -164,7 +166,9 @@ export function SharedLibrary({ initialSkills }: { initialSkills: SkillJson[] })
 
   async function toggleStar(id: string) {
     if (!auth) return;
-    const res = await api.toggleSkillStar(auth.token, id);
+    const token = await getToken();
+    if (!token) return;
+    const res = await api.toggleSkillStar(token, id);
     setStarred((prev) => {
       const next = new Set(prev);
       if (res.starred) next.add(id);

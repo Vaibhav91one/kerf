@@ -1,4 +1,6 @@
-const API = 'http://127.0.0.1:3211';
+// Overridable so the suite can run against a second backend without stopping
+// whatever is already on the default port.
+const API = process.env.KERF_API_URL ?? 'http://127.0.0.1:3211';
 const ADMIN = 'devtoken-abc';
 const out = [];
 const log = (...a) => out.push(a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' '));

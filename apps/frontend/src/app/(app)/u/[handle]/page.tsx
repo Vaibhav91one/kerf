@@ -16,7 +16,7 @@ import {
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { Avatar, BadgeArt, LeagueArt } from '@/components/kerf/artwork';
-import { Panel, SectionLabel, StatCard } from '@/components/kerf/ui';
+import { PageSkeleton, Panel, SectionLabel, StatCard } from '@/components/kerf/ui';
 
 function SkillBar({ name, count, max }: { name: string; count: number; max: number }) {
   return (
@@ -34,7 +34,7 @@ function SkillBar({ name, count, max }: { name: string; count: number; max: numb
 
 export default function ProfilePage({ params }: PageProps<'/u/[handle]'>) {
   const { handle } = use(params);
-  const { auth } = useAuth();
+  const { auth, getToken } = useAuth();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [season, setSeason] = useState<SeasonCurrent | null>(null);
   const [live, setLive] = useState<LiveSessionJson[]>([]);
@@ -58,11 +58,11 @@ export default function ProfilePage({ params }: PageProps<'/u/[handle]'>) {
       setMine(null);
       return;
     }
-    api.mySessions(auth.token).then(setMine).catch(() => {});
-  }, [auth, isOwn]);
+    void getToken().then((t) => (t ? api.mySessions(t).then(setMine) : null)).catch(() => {});
+  }, [auth, isOwn, getToken]);
 
   if (missing) return <p className="text-[14px] text-muted-foreground">No profile at @{handle}.</p>;
-  if (!profile) return null;
+  if (!profile) return <PageSkeleton />;
 
   const { standing, badges, projects, skills } = profile;
   const rank = season ? season.standings.findIndex((s) => s.handle === handle) : -1;
@@ -124,8 +124,8 @@ export default function ProfilePage({ params }: PageProps<'/u/[handle]'>) {
 
       <div className="grid grid-cols-4 gap-5">
         <StatCard
-          label="AVG REWORK RATIO"
-          value={standing.avgReworkRatio === null ? '—' : standing.avgReworkRatio.toFixed(3)}
+          label="SEASON SCORE"
+          value={standing.score === null ? '—' : standing.score.toFixed(3)}
           foot={`season 1, ${standing.sessionCount} session${standing.sessionCount === 1 ? '' : 's'}`}
         />
         <StatCard

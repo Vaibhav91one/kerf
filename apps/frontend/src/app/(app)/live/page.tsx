@@ -85,7 +85,7 @@ const FILTERS = ['All', 'People I follow', 'My projects'] as const;
 type Filter = (typeof FILTERS)[number];
 
 export default function LivePage() {
-  const { auth } = useAuth();
+  const { auth, getToken } = useAuth();
   const [sessions, setSessions] = useState<Map<string, LiveSessionJson>>(new Map());
   const [ended, setEnded] = useState<Ended[]>([]);
   const [messages, setMessages] = useState<ChatMessageJson[]>([]);
@@ -167,7 +167,9 @@ export default function LivePage() {
     if (!auth || !body.trim()) return;
     setChatError(null);
     try {
-      await api.postChat(auth.token, body.trim());
+      const token = await getToken();
+      if (!token) throw new Error('not signed in');
+      await api.postChat(token, body.trim());
       setBody('');
     } catch (err) {
       setChatError(err instanceof Error ? err.message : 'Failed to send');

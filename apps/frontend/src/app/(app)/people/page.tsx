@@ -31,7 +31,13 @@ export default function PeoplePage() {
         subtitle="Everyone who has claimed a handle. Open a profile for their standing, badges and published projects."
       />
 
-      {profiles === null ? null : profiles.length === 0 ? (
+      {profiles === null ? (
+        <div className="grid grid-cols-3 gap-5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-[132px] animate-pulse rounded-[16px] border border-border bg-card" />
+          ))}
+        </div>
+      ) : profiles.length === 0 ? (
         <Panel>
           <p className="text-[13px] text-muted-foreground">Nobody has claimed a handle yet.</p>
         </Panel>

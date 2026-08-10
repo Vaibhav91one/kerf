@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api, type SkillJson, type SkillTotal } from '@/lib/api';
 import { Avatar } from '@/components/kerf/artwork';
-import { PageHeader, Panel, SectionLabel } from '@/components/kerf/ui';
+import { PageHeader, PageSkeleton, Panel, SectionLabel } from '@/components/kerf/ui';
 import { SharedLibrary } from './shared-library';
 
 export default function SkillsPage() {
@@ -29,7 +29,7 @@ export default function SkillsPage() {
     api.skillLibrary('recent').then((r) => setLibrary(r.skills)).catch(() => {});
   }, []);
 
-  if (!skills) return null;
+  if (!skills) return <PageSkeleton />;
 
   const peak = skills.length > 0 ? skills[0].count : 1;
   const focus = skills.find((s) => s.name === selected) ?? null;

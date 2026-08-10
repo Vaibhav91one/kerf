@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { clerkMiddleware } from '@clerk/express';
 import express from 'express';
 import type { SessionMetric } from '@kerf/shared';
-import { tierCuts, tierForValue, improvementTips, badges, currentStreak, tierProgress, LIVE_TTL_MS } from '@kerf/shared';
+import { tierCuts, tierForValue, seasonScore, improvementTips, badges, currentStreak, tierProgress, LIVE_TTL_MS } from '@kerf/shared';
 import { prisma } from './db.ts';
 import { getClerkUserId, requireClerkSession, requireMember, seedEnvProfile, tokenHash, type AuthedRequest } from './auth.ts';
 import {
@@ -459,7 +459,8 @@ app.get('/api/profiles/:handle', async (req, res) => {
   const metrics: SessionMetric[] = rows.map(rowToMetric);
   const qualifying = metrics.filter((m) => m.qualifies && m.reworkRatio !== null);
   const ratios = qualifying.map((m) => m.reworkRatio as number);
-  const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : null;
+  // Same §7.2 rule the season board ranks on, so the two never disagree.
+  const score = seasonScore(ratios);
 
   const skills: Record<string, number> = {};
   if (profile.publicSkills) {
@@ -482,9 +483,9 @@ app.get('/api/profiles/:handle', async (req, res) => {
     // Standing is a ratio, never a count (§7.2). sessionCount rides along for
     // display only, and must not be used to order anything.
     standing: {
-      avgReworkRatio: avg,
-      tier: avg === null ? null : tierForValue(avg, cuts, false),
-      progress: avg === null ? null : tierProgress(avg, cuts),
+      score,
+      tier: score === null ? null : tierForValue(score, cuts, false),
+      progress: score === null ? null : tierProgress(score, cuts),
       sessionCount: qualifying.length,
     },
     streak: currentStreak(qualifying, Date.now()),
@@ -860,16 +861,20 @@ app.get('/api/season/current', async (_req, res) => {
   const nowMs = Date.now();
   const standings = [...byHandle.entries()]
     .map(([handle, { ratios, days }]) => {
-      const avg = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+      // §7.2: a player's season score is the winsorised median of their
+      // qualifying sessions, not the mean. Winsorising is the whole point —
+      // one catastrophic session should not define someone's season, and one
+      // perfect session should not buy a tier.
+      const score = seasonScore(ratios) as number;
       return {
         handle,
-        avgReworkRatio: avg,
-        tier: tierForValue(avg, cuts, false),
+        score,
+        tier: tierForValue(score, cuts, false),
         sessionCount: ratios.length,
         streak: currentStreak(days, nowMs),
       };
     })
-    .sort((a, b) => a.avgReworkRatio - b.avgReworkRatio);
+    .sort((a, b) => a.score - b.score);
 
   // Ten fixed buckets across [0,1] for the season distribution. Counts only —
   // an aggregate shape, not a new class of data, and the same numbers the cuts

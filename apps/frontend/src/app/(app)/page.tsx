@@ -15,7 +15,7 @@ import {
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { BadgeArt, LeagueArt } from '@/components/kerf/artwork';
-import { PageHeader, Panel, SectionLabel, StatCard } from '@/components/kerf/ui';
+import { PageHeader, PageSkeleton, Panel, SectionLabel, StatCard } from '@/components/kerf/ui';
 import { EmptySeason } from '@/components/kerf/empty-season';
 
 // The ladder always reads Bronze → Diamond left to right; because a lower
@@ -63,7 +63,7 @@ function LiveTile({ s, projectName }: { s: LiveSessionJson; projectName: string 
 }
 
 export default function HomePage() {
-  const { auth } = useAuth();
+  const { auth, getToken } = useAuth();
   const [season, setSeason] = useState<SeasonCurrent | null>(null);
   const [live, setLive] = useState<LiveSessionJson[] | null>(null);
   const [projects, setProjects] = useState<ProjectJson[]>([]);
@@ -81,17 +81,17 @@ export default function HomePage() {
       setMe(null);
       return;
     }
-    api.mySessions(auth.token).then(setMe).catch(() => setMe(null));
-  }, [auth]);
+    void getToken().then((t) => (t ? api.mySessions(t).then(setMe) : null)).catch(() => setMe(null));
+  }, [auth, getToken]);
 
   if (error) return <p className="text-[14px] text-destructive">{error}</p>;
-  if (!season) return null;
+  if (!season) return <PageSkeleton />;
   if (season.sampleSize === 0) return <EmptySeason />;
 
   const { cuts, standings } = season;
   const mine = auth ? standings.find((s) => s.handle === auth.handle) ?? null : null;
-  const myAvg = mine?.avgReworkRatio ?? null;
-  const myTier = myAvg === null ? null : tierForValue(myAvg, cuts, false);
+  const myScore = mine?.score ?? null;
+  const myTier = myScore === null ? null : tierForValue(myScore, cuts, false);
   const qualifying = me?.sessions.filter((s) => s.qualifies).length ?? null;
   const projectName = (id: string | null) => (id ? projects.find((p) => p.id === id)?.name ?? null : null);
 
@@ -105,8 +105,8 @@ export default function HomePage() {
       <div className="grid grid-cols-4 gap-5">
         <StatCard
           label="YOUR REWORK RATIO"
-          value={myAvg === null ? '—' : myAvg.toFixed(3)}
-          foot={mine ? `avg over ${mine.sessionCount} sessions` : 'connect your CLI to rank'}
+          value={myScore === null ? '—' : myScore.toFixed(3)}
+          foot={mine ? `season score over ${mine.sessionCount} sessions` : 'connect your CLI to rank'}
         />
         <StatCard
           label="TIER"
@@ -154,9 +154,9 @@ export default function HomePage() {
           })}
         </div>
         <p className="mt-[10px] text-[12px] leading-[15px] text-muted-foreground">
-          {myAvg === null
+          {myScore === null
             ? 'The ladder inverts for rework ratio: lower is better.'
-            : `You sit at ${myAvg.toFixed(3)} — inside the ${myTier} band. The ladder inverts for rework ratio: lower is better.`}
+            : `You sit at ${myScore.toFixed(3)} — inside the ${myTier} band. The ladder inverts for rework ratio: lower is better.`}
         </p>
       </Panel>
 
@@ -212,13 +212,13 @@ export default function HomePage() {
       )}
 
       <Panel>
-        <SectionLabel>STANDINGS — AVERAGE RATIO PER PLAYER</SectionLabel>
+        <SectionLabel>STANDINGS — SEASON SCORE PER PLAYER</SectionLabel>
         <table className="mt-[10px] w-full table-fixed">
           <thead>
             <tr className="border-b border-border text-left align-top [&>th]:pb-[9px] [&>th]:text-[10px] [&>th]:font-semibold [&>th]:leading-[13px] [&>th]:text-primary">
               <th className="w-[60px]">#</th>
               <th>PLAYER</th>
-              <th className="w-[260px]">AVG RATIO</th>
+              <th className="w-[260px]">SCORE</th>
               <th className="w-[220px]">TIER</th>
               <th className="w-[100px]">SESSIONS</th>
             </tr>
@@ -235,7 +235,7 @@ export default function HomePage() {
                       @{s.handle}
                     </Link>
                   </td>
-                  <td className={`py-[9px] font-mono text-[13px] ${tone}`}>{s.avgReworkRatio.toFixed(3)}</td>
+                  <td className={`py-[9px] font-mono text-[13px] ${tone}`}>{s.score.toFixed(3)}</td>
                   <td className={`py-[9px] text-[13px] ${tone}`}>{s.tier ?? '—'}</td>
                   <td className={`py-[9px] font-mono text-[13px] ${tone}`}>{s.sessionCount}</td>
                 </tr>

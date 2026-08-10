@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api, type SeasonCurrent } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { PageHeader, Panel, SectionLabel } from '@/components/kerf/ui';
+import { PageHeader, PageSkeleton, Panel, SectionLabel } from '@/components/kerf/ui';
 
 // Read down the table: each percentile is the worst ratio still inside that
 // tier. Diamond has no cut above it — it is simply everything below p20.
@@ -25,7 +25,7 @@ export default function SeasonPage() {
     api.seasonCurrent().then(setSeason).catch(() => {});
   }, []);
 
-  if (!season) return null;
+  if (!season) return <PageSkeleton />;
   const { cuts, standings, histogram, ghosts } = season;
 
   const mine = auth ? standings.find((s) => s.handle === auth.handle) ?? null : null;
@@ -33,7 +33,7 @@ export default function SeasonPage() {
   const peak = Math.max(1, ...buckets);
   // Which band you sit in, so the chart can mark it the way the comp does.
   const myBucket =
-    mine === null ? -1 : Math.min(buckets.length - 1, Math.max(0, Math.floor(mine.avgReworkRatio * buckets.length)));
+    mine === null ? -1 : Math.min(buckets.length - 1, Math.max(0, Math.floor(mine.score * buckets.length)));
 
   return (
     <div className="space-y-[28px]">
@@ -105,14 +105,14 @@ export default function SeasonPage() {
       <Panel>
         <SectionLabel>STANDINGS</SectionLabel>
         <p className="mt-[6px] text-[11px] leading-[14px] text-muted-foreground">
-          Ranked on average ratio per player. A session count never moves anyone up.
+          Ranked on each player&apos;s winsorised median (§7.2). A session count never moves anyone up.
         </p>
         <table className="mt-[16px] w-full table-fixed">
           <thead>
             <tr className="border-b border-border text-left align-top [&>th]:pb-[9px] [&>th]:text-[10px] [&>th]:font-semibold [&>th]:leading-[13px] [&>th]:text-primary">
               <th className="w-[60px]">#</th>
               <th>PLAYER</th>
-              <th className="w-[220px]">AVG RATIO</th>
+              <th className="w-[220px]">SCORE</th>
               <th className="w-[200px]">TIER</th>
               <th className="w-[140px]">SESSIONS</th>
               <th className="w-[100px]">STREAK</th>
@@ -130,7 +130,7 @@ export default function SeasonPage() {
                       @{s.handle}
                     </Link>
                   </td>
-                  <td className={`py-[11px] font-mono text-[13px] ${tone}`}>{s.avgReworkRatio.toFixed(3)}</td>
+                  <td className={`py-[11px] font-mono text-[13px] ${tone}`}>{s.score.toFixed(3)}</td>
                   <td className={`py-[11px] text-[13px] ${tone}`}>{s.tier ?? '—'}</td>
                   <td className={`py-[11px] font-mono text-[13px] ${tone}`}>{s.sessionCount}</td>
                   <td className={`rounded-r-[12px] py-[11px] font-mono text-[13px] ${tone}`}>{s.streak}</td>
@@ -139,12 +139,12 @@ export default function SeasonPage() {
             })}
             {/* A ghost is a pace marker from a closed season. None exist until a
                 season closes out, so the row simply does not appear. */}
-            {(ghosts as { label?: string; avgReworkRatio?: number; tier?: string }[]).map((g, i) => (
+            {(ghosts as { label?: string; score?: number; tier?: string }[]).map((g, i) => (
               <tr key={`ghost-${i}`}>
                 <td className="py-[11px] font-mono text-[13px] text-muted-foreground">—</td>
                 <td className="py-[11px] text-[13px] text-muted-foreground">{g.label ?? 'ghost'}</td>
                 <td className="py-[11px] font-mono text-[13px] text-muted-foreground">
-                  {g.avgReworkRatio?.toFixed(3) ?? '—'}
+                  {g.score?.toFixed(3) ?? '—'}
                 </td>
                 <td className="py-[11px] text-[13px] text-muted-foreground">{g.tier ?? '—'}</td>
                 <td className="py-[11px] font-mono text-[13px] text-muted-foreground">—</td>

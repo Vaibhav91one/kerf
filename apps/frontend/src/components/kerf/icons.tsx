@@ -2,6 +2,8 @@
 // `Kerf/Asset/Icon/*` (page `Assets — Kerf`, 24px filled grid). Fills are
 // currentColor so a caller sets the semantic role, per the Figma component
 // note: "Use semantic color variables; do not recolor with raw hex values."
+// Knockout shapes take var(--card) rather than white so they follow the
+// surface they sit on in both themes.
 
 type IconProps = { size?: number; className?: string };
 
@@ -10,8 +12,8 @@ export function AccountIcon({ size = 24, className }: IconProps) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
       <g>
 <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" fill="currentColor"/>
-<path d="M12 12C13.6569 12 15 10.6569 15 9C15 7.34315 13.6569 6 12 6C10.3431 6 9 7.34315 9 9C9 10.6569 10.3431 12 12 12Z" fill="white"/>
-<path d="M6.5 18.5C6.5 17.0413 7.07946 15.6424 8.11091 14.6109C9.14236 13.5795 10.5413 13 12 13C13.4587 13 14.8576 13.5795 15.8891 14.6109C16.9205 15.6424 17.5 17.0413 17.5 18.5V19H6.5V18.5Z" fill="white"/>
+<path d="M12 12C13.6569 12 15 10.6569 15 9C15 7.34315 13.6569 6 12 6C10.3431 6 9 7.34315 9 9C9 10.6569 10.3431 12 12 12Z" fill="var(--card)"/>
+<path d="M6.5 18.5C6.5 17.0413 7.07946 15.6424 8.11091 14.6109C9.14236 13.5795 10.5413 13 12 13C13.4587 13 14.8576 13.5795 15.8891 14.6109C16.9205 15.6424 17.5 17.0413 17.5 18.5V19H6.5V18.5Z" fill="var(--card)"/>
 </g>
     </svg>
   );

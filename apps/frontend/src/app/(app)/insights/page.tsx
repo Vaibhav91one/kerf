@@ -6,10 +6,10 @@ import { useEffect, useState } from 'react';
 import { tierForValue } from '@kerf/shared';
 import { api, type MeSessions, type SeasonCurrent, type Tip } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { PageHeader, Panel, SectionLabel } from '@/components/kerf/ui';
+import { PageHeader, PageSkeleton, Panel, SectionLabel } from '@/components/kerf/ui';
 
 export default function InsightsPage() {
-  const { auth, ready } = useAuth();
+  const { auth, ready, getToken } = useAuth();
   const [data, setData] = useState<MeSessions | null>(null);
   const [season, setSeason] = useState<SeasonCurrent | null>(null);
 
@@ -18,14 +18,14 @@ export default function InsightsPage() {
       setData(null);
       return;
     }
-    api.mySessions(auth.token).then(setData).catch(() => {});
-  }, [auth]);
+    void getToken().then((t) => (t ? api.mySessions(t).then(setData) : null)).catch(() => {});
+  }, [auth, getToken]);
 
   useEffect(() => {
     api.seasonCurrent().then(setSeason).catch(() => {});
   }, []);
 
-  if (!ready) return null;
+  if (!ready) return <PageSkeleton />;
 
   if (!auth) {
     return (
@@ -43,7 +43,7 @@ export default function InsightsPage() {
     );
   }
 
-  if (!data) return null;
+  if (!data) return <PageSkeleton />;
 
   const qualifying = data.sessions.filter((s) => s.qualifies).length;
   const tools = Object.entries(data.toolTotals).sort((a, b) => b[1] - a[1]);
