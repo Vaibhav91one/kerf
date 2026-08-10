@@ -24,13 +24,14 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
-const clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-if (process.env.CLERK_SECRET_KEY) app.use(clerkMiddleware({ publishableKey: clerkPublishableKey }));
-app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, streams: subscriberCount() });
 });
+
+const clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+if (process.env.CLERK_SECRET_KEY && clerkPublishableKey) app.use(clerkMiddleware({ publishableKey: clerkPublishableKey }));
+app.use(express.json({ limit: '1mb' }));
 
 // --- Path A: telemetry -------------------------------------------------------
 
