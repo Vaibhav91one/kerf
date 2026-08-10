@@ -10,12 +10,14 @@ const TITLES: Record<string, string> = {
   '/live': 'Live',
   '/season': 'Season',
   '/insights': 'Insights',
+  '/people': 'People',
   '/projects': 'Projects',
   '/skills': 'Skills',
   '/me': 'Me',
 };
 
 function titleFor(pathname: string): string {
+  if (pathname.startsWith('/people/')) return `@${pathname.slice('/people/'.length)}`;
   if (pathname.startsWith('/u/')) return `@${pathname.slice(3)}`;
   return TITLES[pathname] ?? 'Kerf';
 }

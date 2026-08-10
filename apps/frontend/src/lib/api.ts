@@ -59,6 +59,11 @@ export type PublicProfile = {
   projects: ProjectJson[];
 };
 
+export type PublicProfileSummary = Pick<
+  PublicProfile,
+  'handle' | 'displayName' | 'bio' | 'publicSkills' | 'avatarUrl' | 'createdAtMs'
+>;
+
 export type ClerkProfileResponse = { profile: Pick<PublicProfile, 'handle' | 'displayName' | 'bio' | 'publicSkills' | 'avatarUrl' | 'websiteUrl' | 'githubUrl' | 'xUrl' | 'createdAtMs'> | null };
 
 export type ProjectJson = {
@@ -210,6 +215,8 @@ export const api = {
     }),
 
   profile: (handle: string) => request<PublicProfile>(`/api/profiles/${encodeURIComponent(handle)}`),
+
+  profiles: () => request<{ profiles: PublicProfileSummary[] }>('/api/profiles'),
 
   skills: () => request<{ skills: SkillTotal[] }>('/api/skills'),
 

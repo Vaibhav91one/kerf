@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { LIMITS } from '@kerf/shared';
 import { api, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -78,12 +78,14 @@ export function CliConnectClient({ code }: { code: string }) {
 
   if (!code) {
     return (
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Missing CLI code</CardTitle>
-          <CardDescription>Run `kerf login` again to generate a fresh connection link.</CardDescription>
-        </CardHeader>
-      </Card>
+      <Dialog open>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Missing CLI code</DialogTitle>
+            <DialogDescription>Run `kerf login` again to generate a fresh connection link.</DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     );
   }
 
@@ -91,34 +93,36 @@ export function CliConnectClient({ code }: { code: string }) {
 
   if (!isSignedIn) {
     return (
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Connect Kerf CLI</CardTitle>
-          <CardDescription>Sign in with Google, then this browser session will authorize your terminal.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SignInButton mode="modal">
-            <Button>Continue with Google</Button>
-          </SignInButton>
-        </CardContent>
-      </Card>
+      <Dialog open>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Connect Kerf CLI</DialogTitle>
+            <DialogDescription>Sign in with Google, then this browser session will authorize your terminal.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <SignInButton mode="modal">
+              <Button>Continue with Google</Button>
+            </SignInButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     );
   }
 
   if (!hasProfile) {
     return (
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Claim your Kerf handle</CardTitle>
-          <CardDescription>This handle owns the CLI token that will be stored by `kerf login`.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={createProfile} className="space-y-4">
-            <div className="space-y-1.5">
+      <Dialog open>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Claim your Kerf handle</DialogTitle>
+            <DialogDescription>This handle owns the CLI token that will be stored by `kerf login`.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={createProfile} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="handle">Handle</Label>
               <Input id="handle" value={handle} onChange={(e) => setHandle(e.target.value)} maxLength={LIMITS.handle} placeholder="ada" required />
             </div>
-            <div className="space-y-1.5">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="displayName">Display name</Label>
               <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={LIMITS.displayName} required />
             </div>
@@ -127,23 +131,25 @@ export function CliConnectClient({ code }: { code: string }) {
               {busy ? 'Connecting…' : 'Claim and connect CLI'}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
     );
   }
 
   return (
-    <Card className="max-w-xl">
-      <CardHeader>
-        <CardTitle>Authorize this CLI?</CardTitle>
-        <CardDescription>Signed in as @{handle}. This creates a Kerf CLI token for `sync` and `live`.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <Dialog open>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Authorize this CLI?</DialogTitle>
+          <DialogDescription>Signed in as @{handle}. This creates a Kerf CLI token for `sync` and `live`.</DialogDescription>
+        </DialogHeader>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button onClick={claim} disabled={busy}>
-          {busy ? 'Connecting…' : 'Connect CLI'}
-        </Button>
-      </CardContent>
-    </Card>
+        <DialogFooter>
+          <Button onClick={claim} disabled={busy}>
+            {busy ? 'Connecting…' : 'Connect CLI'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

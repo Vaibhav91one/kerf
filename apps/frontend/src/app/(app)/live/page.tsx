@@ -15,7 +15,7 @@ function LiveTile({ s }: { s: LiveSessionJson }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
-          <Link href={`/u/${s.handle}`} className="hover:underline">
+          <Link href={`/people/${s.handle}`} className="hover:underline">
             @{s.handle}
           </Link>
         </CardTitle>
@@ -104,7 +104,7 @@ export default function LivePage() {
         <CardContent ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto" style={{ maxHeight: 400 }}>
           {messages.map((m) => (
             <p key={m.id} className="text-sm">
-              <Link href={`/u/${m.handle}`} className="font-medium hover:underline">
+              <Link href={`/people/${m.handle}`} className="font-medium hover:underline">
                 @{m.handle}
               </Link>{' '}
               {m.body}

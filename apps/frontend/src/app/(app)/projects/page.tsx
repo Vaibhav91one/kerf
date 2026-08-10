@@ -112,7 +112,7 @@ export default function ProjectsPage() {
               <CardHeader>
                 <CardTitle className="text-base">{p.name}</CardTitle>
                 <CardDescription>
-                  <Link href={`/u/${p.handle}`} className="hover:underline">
+                  <Link href={`/people/${p.handle}`} className="hover:underline">
                     @{p.handle}
                   </Link>
                 </CardDescription>

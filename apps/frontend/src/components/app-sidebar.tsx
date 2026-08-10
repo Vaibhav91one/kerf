@@ -11,6 +11,7 @@ import {
   FolderGitIcon,
   WrenchIcon,
   UserIcon,
+  UsersIcon,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -25,6 +26,7 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { ConnectionStatus } from '@/components/connection-status';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 const platform = [
   { title: 'Home', url: '/', icon: HomeIcon },
@@ -34,6 +36,7 @@ const platform = [
 ];
 
 const buildInPublic = [
+  { title: 'People', url: '/people', icon: UsersIcon },
   { title: 'Projects', url: '/projects', icon: FolderGitIcon },
   { title: 'Skills', url: '/skills', icon: WrenchIcon },
   { title: 'Me', url: '/me', icon: UserIcon },
@@ -98,6 +101,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
+        <ThemeToggle />
         <ConnectionStatus />
       </SidebarFooter>
       <SidebarRail />

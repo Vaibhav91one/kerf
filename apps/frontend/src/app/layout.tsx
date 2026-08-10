@@ -31,7 +31,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
   );
 
   return (
-    <html lang="en" className={`${suse.variable} ${suseMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${suse.variable} ${suseMono.variable} dark h-full antialiased`} style={{ colorScheme: 'dark' }} suppressHydrationWarning>
       <body className="min-h-full flex flex-col">
         {clerkKey ? <ClerkProvider publishableKey={clerkKey}>{app}</ClerkProvider> : app}
       </body>

@@ -115,7 +115,7 @@ export default function HomePage() {
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
             {live.map((s) => (
-              <Link key={s.sessionId} href={`/u/${s.handle}`}>
+              <Link key={s.sessionId} href={`/people/${s.handle}`}>
                 <Badge variant="secondary" className="font-mono">
                   @{s.handle} · {s.turns}t / {s.edits}e
                 </Badge>
@@ -158,7 +158,7 @@ export default function HomePage() {
               {season.standings.map((s) => (
                 <TableRow key={s.handle}>
                   <TableCell>
-                    <Link href={`/u/${s.handle}`} className="font-medium hover:underline">
+                    <Link href={`/people/${s.handle}`} className="font-medium hover:underline">
                       @{s.handle}
                     </Link>
                   </TableCell>

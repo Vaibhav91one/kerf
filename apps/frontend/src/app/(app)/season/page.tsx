@@ -52,7 +52,7 @@ export default async function SeasonPage() {
                 <TableRow key={s.handle}>
                   <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                   <TableCell>
-                    <Link href={`/u/${s.handle}`} className="font-medium hover:underline">
+                    <Link href={`/people/${s.handle}`} className="font-medium hover:underline">
                       @{s.handle}
                     </Link>
                   </TableCell>
