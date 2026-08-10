@@ -59,7 +59,17 @@ export type PublicProfile = {
   projects: ProjectJson[];
 };
 
-export type ClerkProfileResponse = { profile: Pick<PublicProfile, 'handle' | 'displayName' | 'bio' | 'publicSkills' | 'avatarUrl' | 'websiteUrl' | 'githubUrl' | 'xUrl' | 'createdAtMs'> | null };
+/** Row shape of the public directory — GET /api/profiles in apps/backend/src/index.ts. */
+export type ProfileSummary = {
+  handle: string;
+  displayName: string;
+  bio: string | null;
+  publicSkills: boolean;
+  avatarUrl: string | null;
+  createdAtMs: number;
+};
+
+export type ClerkProfileResponse ={ profile: Pick<PublicProfile, 'handle' | 'displayName' | 'bio' | 'publicSkills' | 'avatarUrl' | 'websiteUrl' | 'githubUrl' | 'xUrl' | 'createdAtMs'> | null };
 
 export type ProjectJson = {
   id: string;
@@ -208,6 +218,8 @@ export const api = {
       token,
       body: JSON.stringify(body),
     }),
+
+  profiles: () => request<{ profiles: ProfileSummary[] }>('/api/profiles'),
 
   profile: (handle: string) => request<PublicProfile>(`/api/profiles/${encodeURIComponent(handle)}`),
 
