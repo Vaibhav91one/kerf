@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { computeSessionMetric, type Heartbeat } from '@kerf/shared';
 import { extractAll } from './extract.ts';
 import { uploadMetrics, sendHeartbeat } from './upload.ts';
@@ -58,6 +61,42 @@ if (command === 'sync') {
     console.log(`${new Date(now).toISOString()} — ${active.length} live session(s)`);
     await sleep(BEAT_MS);
   }
+} else if (command === 'skill') {
+  const sub = positionals[1];
+  const slug = positionals[2];
+  if (sub !== 'install' || !slug) {
+    console.error('usage: kerf skill install <slug>');
+    process.exit(1);
+  }
+  const apiUrl = process.env.KERF_API_URL;
+  if (!apiUrl) {
+    console.error('KERF_API_URL must be set');
+    process.exit(1);
+  }
+
+  const res = await fetch(`${apiUrl}/api/skill-library/by-slug/${slug}`);
+  if (res.status === 404) {
+    console.error(`no skill published at slug "${slug}"`);
+    process.exit(1);
+  }
+  if (!res.ok) {
+    console.error(`fetch failed: ${res.status} ${res.statusText}`);
+    process.exit(1);
+  }
+  const skill = (await res.json()) as { slug: string; content: string };
+
+  const dir = join(homedir(), '.claude', 'skills', skill.slug);
+  mkdirSync(dir, { recursive: true });
+  const dest = join(dir, 'SKILL.md');
+  writeFileSync(dest, skill.content);
+
+  // Best-effort — one unreachable server must not fail an install that already
+  // wrote the file to disk.
+  await fetch(`${apiUrl}/api/skill-library/by-slug/${skill.slug}/install`, { method: 'POST' }).catch((err) =>
+    console.error(`install-count bump failed: ${err.message}`),
+  );
+
+  console.log(`installed → ${dest}`);
 } else {
   const metrics = await readMetrics();
   const qualifying = metrics.filter((m) => m.qualifies);

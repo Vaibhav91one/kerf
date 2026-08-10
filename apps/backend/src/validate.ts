@@ -3,7 +3,7 @@
 // stored — a stray free-text field must fail closed, never pass through.
 
 import type { Heartbeat, SessionMetric } from '@kerf/shared';
-import { LIMITS, cleanHandle, cleanRepoUrl, cleanText } from '@kerf/shared';
+import { LIMITS, cleanHandle, cleanMultilineText, cleanRepoUrl, cleanText } from '@kerf/shared';
 
 const ALLOWED_KEYS = new Set<keyof SessionMetric>([
   'source',
@@ -135,11 +135,40 @@ function walk<T>(input: unknown, allowed: string[]): { ok: true; obj: Record<str
   return { ok: true, obj };
 }
 
-export type ProfileInput = { handle: string; displayName: string; bio: string | null; publicSkills: boolean };
+export type ProfileInput = {
+  handle: string;
+  displayName: string;
+  bio: string | null;
+  publicSkills: boolean;
+  avatarUrl: string | null;
+  websiteUrl: string | null;
+  githubUrl: string | null;
+  xUrl: string | null;
+};
 export type ProfileResult = { ok: true; value: ProfileInput } | { ok: false; reason: string };
 
+function cleanOptionalUrl(
+  v: unknown,
+  field: string,
+  max: number,
+): { ok: true; value: string | null } | { ok: false; reason: string } {
+  if (v == null || v === '') return { ok: true, value: null };
+  const cleaned = cleanRepoUrl(v, max);
+  if (!cleaned) return { ok: false, reason: `invalid ${field}` };
+  return { ok: true, value: cleaned };
+}
+
 export function validateProfileInput(input: unknown): ProfileResult {
-  const walked = walk(input, ['handle', 'displayName', 'bio', 'publicSkills']);
+  const walked = walk(input, [
+    'handle',
+    'displayName',
+    'bio',
+    'publicSkills',
+    'avatarUrl',
+    'websiteUrl',
+    'githubUrl',
+    'xUrl',
+  ]);
   if (!walked.ok) return walked;
   const { obj } = walked;
 
@@ -157,7 +186,28 @@ export function validateProfileInput(input: unknown): ProfileResult {
     return { ok: false, reason: 'invalid publicSkills' };
   }
 
-  return { ok: true, value: { handle, displayName, bio, publicSkills: obj.publicSkills === true } };
+  const avatar = cleanOptionalUrl(obj.avatarUrl, 'avatarUrl', LIMITS.avatarUrl);
+  if (!avatar.ok) return avatar;
+  const website = cleanOptionalUrl(obj.websiteUrl, 'websiteUrl', LIMITS.socialUrl);
+  if (!website.ok) return website;
+  const github = cleanOptionalUrl(obj.githubUrl, 'githubUrl', LIMITS.socialUrl);
+  if (!github.ok) return github;
+  const x = cleanOptionalUrl(obj.xUrl, 'xUrl', LIMITS.socialUrl);
+  if (!x.ok) return x;
+
+  return {
+    ok: true,
+    value: {
+      handle,
+      displayName,
+      bio,
+      publicSkills: obj.publicSkills === true,
+      avatarUrl: avatar.value,
+      websiteUrl: website.value,
+      githubUrl: github.value,
+      xUrl: x.value,
+    },
+  };
 }
 
 export type ProjectInput = { name: string; description: string | null; repoUrl: string | null; projectHash: string | null };
@@ -190,6 +240,31 @@ export function validateProjectInput(input: unknown): ProjectResult {
   }
 
   return { ok: true, value: { name, description, repoUrl, projectHash } };
+}
+
+export type SkillInput = { name: string; description: string | null; content: string };
+export type SkillResult = { ok: true; value: SkillInput } | { ok: false; reason: string };
+
+// `handle` and `slug` are deliberately not accepted here: handle comes from
+// the bearer token, slug is derived server-side from name (see index.ts).
+export function validateSkillInput(input: unknown): SkillResult {
+  const walked = walk(input, ['name', 'description', 'content']);
+  if (!walked.ok) return walked;
+  const { obj } = walked;
+
+  const name = cleanText(obj.name, LIMITS.skillName);
+  if (!name) return { ok: false, reason: 'invalid name' };
+
+  let description: string | null = null;
+  if (obj.description != null && obj.description !== '') {
+    description = cleanText(obj.description, LIMITS.skillDescription);
+    if (!description) return { ok: false, reason: 'invalid description' };
+  }
+
+  const content = cleanMultilineText(obj.content, LIMITS.skillContent);
+  if (!content) return { ok: false, reason: 'invalid content' };
+
+  return { ok: true, value: { name, description, content } };
 }
 
 export type ChatResult = { ok: true; value: { body: string } } | { ok: false; reason: string };

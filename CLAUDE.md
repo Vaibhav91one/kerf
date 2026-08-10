@@ -28,8 +28,9 @@ edit it.
 - `apps/backend` — Express + Prisma + Postgres. Per-account bearer tokens (raw token shown once,
   only its sha256 digest is stored). No `event` table, by design (privacy: raw events never leave
   the user's machine). Tables: `session_metrics`, `profiles`, `live_sessions`, `projects`,
-  `chat_messages` — no persisted `season` (tier cuts computed live). Real-time is SSE
-  (`GET /api/live/stream`), fanned out by an in-process `EventEmitter` in `src/live.ts`.
+  `chat_messages`, `skills_library`, `skill_stars` — no persisted `season` (tier cuts computed
+  live). Real-time is SSE (`GET /api/live/stream`), fanned out by an in-process `EventEmitter` in
+  `src/live.ts`.
 - `apps/frontend` — Next.js dashboard. **Gate cleared 2026-08-09**: Tailwind + shadcn/ui with the
   `sidebar-07` shell, SUSE + SUSE Mono type. Nine wireframed routes (`/`, `/live`, `/u/[handle]`,
   `/skills`, `/projects`, `/me`, `/season`, `/insights`, plus the empty state) — see `BUILD_LOG.md`
@@ -50,10 +51,12 @@ ports in deployment regardless.
   schema-walk every payload in `src/validate.ts` and reject (not store) anything that doesn't match
   `SessionMetric` / `Heartbeat` exactly — silently accepting an unexpected string field is a privacy
   bug, not a validation nicety. Fails closed: unknown key → reject the whole item.
-- **Path B — user-authored content** (profiles, projects, chat). Free text is allowed here *because
-  a human typed it into a form and chose to publish it*. Sanitised in `packages/shared/src/social.ts`
-  (length caps, control-char/bidi stripping, `http(s)`-only repo URLs). **No code path may populate a
-  Path-B column from a transcript.** Adding one would be the privacy bug §6 exists to prevent.
+- **Path B — user-authored content** (profiles, projects, chat, shared skills). Free text is
+  allowed here *because a human typed it into a form and chose to publish it*. Sanitised in
+  `packages/shared/src/social.ts` (length caps, control-char/bidi stripping, `http(s)`-only repo
+  URLs; skill content uses `cleanMultilineText`, which preserves newlines instead of collapsing
+  them). **No code path may populate a Path-B column from a transcript.** Adding one would be the
+  privacy bug §6 exists to prevent.
 
 **Never print real transcript contents back** — not in logs, not in test fixtures, not in a build log
 entry, not in a report. Transcripts are the user's own prompt history. Schema/shape inspection is

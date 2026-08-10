@@ -14,14 +14,42 @@ export default async function ProfilePage({ params }: PageProps<'/u/[handle]'>) 
 
   if (!profile) notFound();
 
+  const { skills: allSkills } = await api.skillLibrary();
+  const publishedSkills = allSkills.filter((s) => s.handle === profile.handle);
+
+  const socialLinks = [
+    { label: 'Website', url: profile.websiteUrl },
+    { label: 'GitHub', url: profile.githubUrl },
+    { label: 'X', url: profile.xUrl },
+  ].filter((l): l is { label: string; url: string } => Boolean(l.url));
+
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>{profile.displayName}</CardTitle>
-          <CardDescription>@{profile.handle}</CardDescription>
+        <CardHeader className="flex flex-row items-center gap-4">
+          {profile.avatarUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={profile.avatarUrl} alt="" className="h-14 w-14 rounded-full border object-cover" />
+          )}
+          <div>
+            <CardTitle>{profile.displayName}</CardTitle>
+            <CardDescription>@{profile.handle}</CardDescription>
+          </div>
         </CardHeader>
-        {profile.bio && <CardContent className="text-sm text-muted-foreground">{profile.bio}</CardContent>}
+        {(profile.bio || socialLinks.length > 0) && (
+          <CardContent className="space-y-2">
+            {profile.bio && <p className="text-sm text-muted-foreground">{profile.bio}</p>}
+            {socialLinks.length > 0 && (
+              <div className="flex gap-3 text-sm">
+                {socialLinks.map((l) => (
+                  <Link key={l.label} href={l.url} className="text-primary hover:underline" target="_blank" rel="noreferrer">
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        )}
       </Card>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -107,6 +135,29 @@ export default async function ProfilePage({ params }: PageProps<'/u/[handle]'>) 
                     </Link>
                   </CardContent>
                 )}
+              </Card>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {publishedSkills.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Skills published</CardTitle>
+            <CardDescription>Shared with the league — see the Shared Library tab on Skills to install.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            {publishedSkills.map((s) => (
+              <Card key={s.id}>
+                <CardHeader>
+                  <CardTitle className="text-base">{s.name}</CardTitle>
+                  {s.description && <CardDescription>{s.description}</CardDescription>}
+                </CardHeader>
+                <CardContent className="flex gap-2 text-xs text-muted-foreground">
+                  <Badge variant="secondary">{s.starCount} ★</Badge>
+                  <Badge variant="secondary">{s.installCount} installs</Badge>
+                </CardContent>
               </Card>
             ))}
           </CardContent>

@@ -5,6 +5,7 @@ import {
   validateHeartbeat,
   validateProfileInput,
   validateProjectInput,
+  validateSkillInput,
   validateChatInput,
 } from './validate.ts';
 
@@ -134,6 +135,53 @@ test('profile strips control characters from the display name', () => {
   const result = validateProfileInput({ handle: 'abc', displayName: 'Ann\u202Eie' });
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.value.displayName, 'Ann ie');
+});
+
+test('profile accepts avatar/social urls and rejects javascript: in any of them', () => {
+  const ok = validateProfileInput({
+    handle: 'abc',
+    displayName: 'A',
+    avatarUrl: 'https://example.com/me.png',
+    websiteUrl: 'https://example.com',
+    githubUrl: 'https://github.com/abc',
+    xUrl: 'https://x.com/abc',
+  });
+  assert.equal(ok.ok, true);
+  if (ok.ok) {
+    assert.equal(ok.value.avatarUrl, 'https://example.com/me.png');
+    assert.equal(ok.value.githubUrl, 'https://github.com/abc');
+  }
+  assert.equal(validateProfileInput({ handle: 'abc', displayName: 'A', websiteUrl: 'javascript:alert(1)' }).ok, false);
+});
+
+test('profile treats empty-string social urls as absent, not invalid', () => {
+  const result = validateProfileInput({ handle: 'abc', displayName: 'A', avatarUrl: '', xUrl: '' });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.avatarUrl, null);
+    assert.equal(result.value.xUrl, null);
+  }
+});
+
+test('skill accepts name/description/content and rejects a spoofed handle field', () => {
+  const ok = validateSkillInput({ name: 'My Skill', description: 'does a thing', content: '# Steps\n1. do it' });
+  assert.equal(ok.ok, true);
+  if (ok.ok) assert.equal(ok.value.content, '# Steps\n1. do it');
+
+  const spoofed = validateSkillInput({ name: 'My Skill', content: 'x', handle: 'someone-else' });
+  assert.equal(spoofed.ok, false);
+  if (!spoofed.ok) assert.match(spoofed.reason, /unexpected field/);
+});
+
+test('skill preserves markdown newlines instead of flattening them like chat', () => {
+  const result = validateSkillInput({ name: 'Fmt', content: 'line one\n\n## Heading\n- item' });
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.value.content, 'line one\n\n## Heading\n- item');
+});
+
+test('skill rejects empty content and an over-length name', () => {
+  assert.equal(validateSkillInput({ name: 'ok', content: '   ' }).ok, false);
+  assert.equal(validateSkillInput({ name: 'x'.repeat(65), content: 'ok' }).ok, false);
 });
 
 test('project accepts an https repo url and rejects javascript:', () => {

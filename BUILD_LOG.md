@@ -324,8 +324,46 @@ content appears anywhere in either Figma file.
 
 ### Next
 
-- `apps/frontend`: build the 9 wireframed screens with Tailwind + shadcn/ui (`sidebar-07`), SUSE.
-- `gh repo create Vaibhav91one/kerf --public` + push.
-- Deploy 3 services to Zerops, verify live URL — confirm `zerops.yml`'s DB env var name first
-  (`${db_connectionString}` vs `${postgresql_connectionString}`), and check whether the backend
-  needs `KERF_HANDLE` in `envVariables`.
+### Shared Skills Library + profile links
+
+User asked for people to share the Claude Code Skills they use day to day: browse them, copy them,
+install them via a real CLI command, star them, and show them on public profiles. This is Path B
+content: a human publishes the skill markdown explicitly. It is not transcript-derived telemetry.
+
+- `packages/shared/src/social.ts`: added `cleanMultilineText()` for skill markdown. It preserves
+  newlines/code blocks while still stripping control/bidi characters and enforcing length caps.
+  Profile types now include `avatarUrl`, `websiteUrl`, `githubUrl`, `xUrl`; `Skill` type added.
+- `apps/backend/prisma/schema.prisma`: added `skills_library` and `skill_stars`, plus avatar/social
+  columns on `profiles`. Migration: `20260810023743_skill_library_and_profile_links`.
+- `apps/backend/src/validate.ts`: profile URL validation added; `validateSkillInput()` accepts only
+  `name`, `description`, and `content`. `handle` comes from the bearer token; `slug` is generated
+  server-side.
+- `apps/backend/src/index.ts`: added `POST /api/skill-library`, list/detail/by-slug reads,
+  star/unstar toggle, and install-count bump. The list endpoint now returns `isStarredByMe` when a
+  bearer token is present, so starred state survives reload.
+- `apps/cli/src/index.ts`: added `kerf skill install <slug>`, which fetches by slug and writes
+  `~/.claude/skills/<slug>/SKILL.md`, then bumps the install counter best-effort.
+- `apps/frontend`: `/skills` now has two tabs: existing League Usage and new Shared Library. The
+  shared tab supports publish, detail preview, star/unstar, copy content, and copy install command.
+  `/me` profile settings gained avatar/social URL fields. `/u/[handle]` shows avatar/social links
+  and published skill cards.
+- Figma Design file updated with the `/skills` Shared Library tab and `/me` profile-edit state.
+  FigJam board remains exactly 3 pages; Backend/Frontend pages include the new skill-library tables,
+  routes, and frontend flow.
+
+Verification after the reload-state fix:
+
+- `pnpm -r typecheck` clean.
+- `pnpm -r test` clean: 39/39 shared, 33/33 backend, 1/1 CLI.
+- `NEXT_PUBLIC_API_URL=http://127.0.0.1:3211 pnpm --filter @kerf/frontend build` clean. Only warning:
+  Next could not generate fallback metrics for `SUSE Mono`.
+- Local Postgres smoke: publish skill, fetch by slug, star/unstar, run real `kerf skill install`,
+  verify exact `SKILL.md` written, verify install counter increments.
+- Authenticated list smoke: after starring a skill, `GET /api/skill-library` returns
+  `isStarredByMe: true`, fixing the reload-state bug found during review.
+
+### Next
+
+- Commit and push the shared-skills implementation.
+- Deploy backend then frontend to Zerops.
+- Verify live backend/frontend URLs and live shared-skills flow.

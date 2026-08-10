@@ -61,17 +61,55 @@ model Profile {
   // Opt-in: skill names are §6-safe to store, which is a different question
   // from being safe to show strangers. Default off.
   publicSkills Boolean @default(false) @map("public_skills")
+  // Optional, all http(s)-only (packages/shared/src/social.ts cleanRepoUrl).
+  avatarUrl   String?  @map("avatar_url")
+  websiteUrl  String?  @map("website_url")
+  githubUrl   String?  @map("github_url")
+  xUrl        String?  @map("x_url")
   // sha256 of the account's CLI token. The raw token is shown once, at
   // creation, and never stored — a leaked DB dump must not be a set of keys.
   tokenHash   String   @unique @map("token_hash")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  sessions SessionMetric[]
-  projects Project[]
-  messages ChatMessage[]
-  live     LiveSession[]
+  sessions   SessionMetric[]
+  projects   Project[]
+  messages   ChatMessage[]
+  live       LiveSession[]
+  skills     Skill[]
+  skillStars SkillStar[]
 
   @@map("profiles")
+}
+
+// A published Claude Code Skill — same Path B rule as everything else in this
+// block: a human pastes their own skill's instructions into the publish form
+// and clicks publish. `content` never comes from a transcript.
+model Skill {
+  id           String   @id @default(uuid())
+  handle       String
+  slug         String   @unique
+  name         String
+  description  String?
+  content      String
+  installCount Int      @default(0) @map("install_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  owner Profile     @relation(fields: [handle], references: [handle], onDelete: Cascade)
+  stars SkillStar[]
+
+  @@index([handle])
+  @@map("skills_library")
+}
+
+model SkillStar {
+  skillId String @map("skill_id")
+  handle  String
+
+  skill Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  owner Profile @relation(fields: [handle], references: [handle], onDelete: Cascade)
+
+  @@id([skillId, handle])
+  @@map("skill_stars")
 }
 
 model Project {

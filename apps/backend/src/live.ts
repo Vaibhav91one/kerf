@@ -15,7 +15,8 @@ export type LiveEvent =
   | { type: 'session'; data: unknown }
   | { type: 'session-end'; data: unknown }
   | { type: 'chat'; data: unknown }
-  | { type: 'project'; data: unknown };
+  | { type: 'project'; data: unknown }
+  | { type: 'skill'; data: unknown };
 
 const bus = new EventEmitter();
 // One listener per connected browser; the default cap of 10 would start

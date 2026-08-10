@@ -95,6 +95,10 @@ function ProfileSettings() {
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [publicSkills, setPublicSkills] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [githubUrl, setGithubUrl] = useState('');
+  const [xUrl, setXUrl] = useState('');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,6 +108,10 @@ function ProfileSettings() {
       setDisplayName(p.displayName);
       setBio(p.bio ?? '');
       setPublicSkills(p.publicSkills);
+      setAvatarUrl(p.avatarUrl ?? '');
+      setWebsiteUrl(p.websiteUrl ?? '');
+      setGithubUrl(p.githubUrl ?? '');
+      setXUrl(p.xUrl ?? '');
     });
   }, [auth]);
 
@@ -112,7 +120,15 @@ function ProfileSettings() {
     setError(null);
     setSaved(false);
     try {
-      await api.updateMyProfile(auth.token, { displayName, bio: bio || undefined, publicSkills });
+      await api.updateMyProfile(auth.token, {
+        displayName,
+        bio: bio || undefined,
+        publicSkills,
+        avatarUrl: avatarUrl || undefined,
+        websiteUrl: websiteUrl || undefined,
+        githubUrl: githubUrl || undefined,
+        xUrl: xUrl || undefined,
+      });
       setSaved(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to save');
@@ -135,6 +151,30 @@ function ProfileSettings() {
         <div className="space-y-1.5">
           <Label htmlFor="bio">Bio</Label>
           <Textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} rows={3} />
+        </div>
+        <div className="flex items-center gap-3">
+          {avatarUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="" className="h-12 w-12 rounded-full border object-cover" />
+          )}
+          <div className="flex-1 space-y-1.5">
+            <Label htmlFor="avatarUrl">Avatar URL</Label>
+            <Input id="avatarUrl" value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} maxLength={LIMITS.avatarUrl} placeholder="https://…" />
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="websiteUrl">Website</Label>
+            <Input id="websiteUrl" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} maxLength={LIMITS.socialUrl} placeholder="https://…" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="githubUrl">GitHub</Label>
+            <Input id="githubUrl" value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} maxLength={LIMITS.socialUrl} placeholder="https://github.com/…" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="xUrl">X</Label>
+            <Input id="xUrl" value={xUrl} onChange={(e) => setXUrl(e.target.value)} maxLength={LIMITS.socialUrl} placeholder="https://x.com/…" />
+          </div>
         </div>
         <div className="flex items-center justify-between rounded-md border p-3">
           <div>

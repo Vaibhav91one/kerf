@@ -1,14 +1,10 @@
-# Zerops deploy config for the `backend` service.
-#
-# TODO before first deploy (task #8): confirm the actual generated env var
-# name for the `postgresql` service's connection string in the Zerops
-# dashboard — `${db_connectionString}` below is the documented convention
-# (hostname-prefixed) but the real service is named `postgresql`, not `db`,
-# so this may need to become `${postgresql_connectionString}`. Verify against
-# the live project rather than trusting this comment.
-#
-# `frontend` setup block is not written yet — apps/frontend doesn't exist,
-# gated on picking a UI design system with the user first (see CLAUDE.md).
+# Zerops deploy config for the `backend` and `frontend` services.
+# Verified against the live `kerf` project (zcli project env): the postgresql
+# service's connection string env var is `${postgresql_connectionString}`.
+# Backend's public URL is deterministic from its subdomain host + declared
+# port: https://backend-2cf9-3000.prg1.zerops.app — used below as the
+# frontend's build-time NEXT_PUBLIC_API_URL (inlined at `next build`, so it
+# must be present during build, not just runtime).
 
 zerops:
   - setup: backend
@@ -21,14 +17,34 @@ zerops:
       deployFiles: ./
       cache:
         - node_modules
+      envVariables:
+        COREPACK_NPM_REGISTRY: https://registry.npmmirror.com
     run:
       base: nodejs@22
       ports:
         - port: 3000
           httpSupport: true
       envVariables:
-        - name: DATABASE_URL
-          content: ${db_connectionString}
-        - name: KERF_TOKEN
-          content: ${KERF_TOKEN}
+        DATABASE_URL: ${postgresql_connectionString}/${postgresql_dbName}
+        KERF_TOKEN: ${KERF_TOKEN}
       start: sh -c 'cd apps/backend && pnpm run prisma:deploy && pnpm start'
+
+  - setup: frontend
+    build:
+      base: nodejs@22
+      buildCommands:
+        - corepack enable
+        - pnpm install --frozen-lockfile
+        - pnpm --filter @kerf/frontend build
+      deployFiles: ./
+      cache:
+        - node_modules
+      envVariables:
+        COREPACK_NPM_REGISTRY: https://registry.npmmirror.com
+        NEXT_PUBLIC_API_URL: https://backend-2cf9-3000.prg1.zerops.app
+    run:
+      base: nodejs@22
+      ports:
+        - port: 3000
+          httpSupport: true
+      start: sh -c 'cd apps/frontend && pnpm start'

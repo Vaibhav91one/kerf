@@ -9,6 +9,7 @@ import {
   validateHeartbeat,
   validateProfileInput,
   validateProjectInput,
+  validateSkillInput,
   validateChatInput,
 } from './validate.ts';
 import { publish, subscribe, subscriberCount } from './live.ts';
@@ -221,7 +222,7 @@ app.post('/api/profiles', async (req, res) => {
     res.status(400).json({ error: result.reason });
     return;
   }
-  const { handle, displayName, bio, publicSkills } = result.value;
+  const { handle, displayName, bio, publicSkills, avatarUrl, websiteUrl, githubUrl, xUrl } = result.value;
   const existing = await prisma.profile.findUnique({ where: { handle }, select: { handle: true } });
   if (existing) {
     res.status(409).json({ error: 'handle taken' });
@@ -229,7 +230,7 @@ app.post('/api/profiles', async (req, res) => {
   }
   const token = randomBytes(32).toString('hex');
   await prisma.profile.create({
-    data: { handle, displayName, bio, publicSkills, tokenHash: tokenHash(token) },
+    data: { handle, displayName, bio, publicSkills, avatarUrl, websiteUrl, githubUrl, xUrl, tokenHash: tokenHash(token) },
   });
   res.status(201).json({ handle, token });
 });
@@ -241,11 +242,20 @@ app.patch('/api/me/profile', bearerAuth, async (req: AuthedRequest, res) => {
     res.status(400).json({ error: result.reason });
     return;
   }
-  const { displayName, bio, publicSkills } = result.value;
+  const { displayName, bio, publicSkills, avatarUrl, websiteUrl, githubUrl, xUrl } = result.value;
   const row = await prisma.profile.update({
     where: { handle },
-    data: { displayName, bio, publicSkills },
-    select: { handle: true, displayName: true, bio: true, publicSkills: true },
+    data: { displayName, bio, publicSkills, avatarUrl, websiteUrl, githubUrl, xUrl },
+    select: {
+      handle: true,
+      displayName: true,
+      bio: true,
+      publicSkills: true,
+      avatarUrl: true,
+      websiteUrl: true,
+      githubUrl: true,
+      xUrl: true,
+    },
   });
   res.json(row);
 });
@@ -254,7 +264,7 @@ app.get('/api/profiles', async (_req, res) => {
   const rows = await prisma.profile.findMany({
     orderBy: { createdAt: 'asc' },
     take: 200,
-    select: { handle: true, displayName: true, bio: true, publicSkills: true, createdAt: true },
+    select: { handle: true, displayName: true, bio: true, publicSkills: true, avatarUrl: true, createdAt: true },
   });
   res.json({
     profiles: rows.map((r) => ({
@@ -262,6 +272,7 @@ app.get('/api/profiles', async (_req, res) => {
       displayName: r.displayName,
       bio: r.bio,
       publicSkills: r.publicSkills,
+      avatarUrl: r.avatarUrl,
       createdAtMs: r.createdAt.getTime(),
     })),
   });
@@ -304,6 +315,10 @@ app.get('/api/profiles/:handle', async (req, res) => {
     handle: profile.handle,
     displayName: profile.displayName,
     bio: profile.bio,
+    avatarUrl: profile.avatarUrl,
+    websiteUrl: profile.websiteUrl,
+    githubUrl: profile.githubUrl,
+    xUrl: profile.xUrl,
     createdAtMs: profile.createdAt.getTime(),
     // Standing is a ratio, never a count (§7.2). sessionCount rides along for
     // display only, and must not be used to order anything.
@@ -395,6 +410,161 @@ app.get('/api/projects/:id', async (req, res) => {
     where: { projectId: row.id, lastBeatMs: { gte: BigInt(Date.now() - LIVE_TTL_MS) } },
   });
   res.json({ ...toProjectJson(row), liveSessions: live.length });
+});
+
+// --- Shared Skills Library (Path B) ------------------------------------------
+//
+// Distinct from GET /api/skills above (which is a Path A tool-usage leaderboard
+// derived from transcript toolCounts). This is a human publishing an actual
+// Claude Code Skill they use day to day — the same Path B rule as projects and
+// chat: a person typed `content` into a form and clicked Publish. `handle` and
+// `slug` are never accepted from the client (see validateSkillInput).
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48)
+    .replace(/-+$/g, '') || 'skill';
+}
+
+/** Best-effort handle from a bearer token — used only to compute isStarredByMe on public reads. */
+async function optionalHandle(req: express.Request): Promise<string | null> {
+  const parts = (req.header('authorization') ?? '').split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer' || !parts[1]) return null;
+  const profile = await prisma.profile.findUnique({ where: { tokenHash: tokenHash(parts[1]) }, select: { handle: true } });
+  return profile?.handle ?? null;
+}
+
+function toSkillJson(s: {
+  id: string;
+  handle: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  content: string;
+  installCount: number;
+  createdAt: Date;
+  _count: { stars: number };
+}) {
+  return {
+    id: s.id,
+    handle: s.handle,
+    slug: s.slug,
+    name: s.name,
+    description: s.description,
+    content: s.content,
+    installCount: s.installCount,
+    starCount: s._count.stars,
+    createdAtMs: s.createdAt.getTime(),
+  };
+}
+
+const SKILL_INCLUDE = { _count: { select: { stars: true as const } } };
+
+app.post('/api/skill-library', bearerAuth, async (req: AuthedRequest, res) => {
+  const handle = req.handle as string;
+  const result = validateSkillInput(req.body);
+  if (!result.ok) {
+    res.status(400).json({ error: result.reason });
+    return;
+  }
+
+  const base = slugify(result.value.name);
+  let slug = base;
+  let row;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      row = await prisma.skill.create({
+        data: { handle, slug, ...result.value },
+        include: SKILL_INCLUDE,
+      });
+      break;
+    } catch {
+      // Unique constraint on slug — retry with a short random suffix.
+      slug = `${base}-${randomBytes(2).toString('hex')}`;
+    }
+  }
+  if (!row) {
+    res.status(500).json({ error: 'could not allocate a unique slug' });
+    return;
+  }
+
+  const json = toSkillJson(row);
+  publish({ type: 'skill', data: json });
+  res.status(201).json(json);
+});
+
+app.get('/api/skill-library', async (req, res) => {
+  const rows = await prisma.skill.findMany({ orderBy: { createdAt: 'desc' }, take: 200, include: SKILL_INCLUDE });
+  const handle = await optionalHandle(req);
+  const starred = handle
+    ? new Set(
+        (
+          await prisma.skillStar.findMany({
+            where: { handle, skillId: { in: rows.map((r) => r.id) } },
+            select: { skillId: true },
+          })
+        ).map((s) => s.skillId),
+      )
+    : new Set<string>();
+  const skills = rows.map((row) => ({ ...toSkillJson(row), isStarredByMe: starred.has(row.id) }));
+  if (req.query.sort === 'stars') skills.sort((a, b) => b.starCount - a.starCount);
+  res.json({ skills });
+});
+
+app.get('/api/skill-library/:id', async (req, res) => {
+  const row = await prisma.skill.findUnique({ where: { id: req.params.id }, include: SKILL_INCLUDE });
+  if (!row) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  const handle = await optionalHandle(req);
+  const isStarredByMe = handle
+    ? (await prisma.skillStar.findUnique({ where: { skillId_handle: { skillId: row.id, handle } } })) !== null
+    : false;
+  res.json({ ...toSkillJson(row), isStarredByMe });
+});
+
+app.get('/api/skill-library/by-slug/:slug', async (req, res) => {
+  const row = await prisma.skill.findUnique({ where: { slug: req.params.slug }, include: SKILL_INCLUDE });
+  if (!row) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  const handle = await optionalHandle(req);
+  const isStarredByMe = handle
+    ? (await prisma.skillStar.findUnique({ where: { skillId_handle: { skillId: row.id, handle } } })) !== null
+    : false;
+  res.json({ ...toSkillJson(row), isStarredByMe });
+});
+
+app.post('/api/skill-library/:id/star', bearerAuth, async (req: AuthedRequest, res) => {
+  const handle = req.handle as string;
+  const skillId = req.params.id as string;
+  const existing = await prisma.skillStar.findUnique({ where: { skillId_handle: { skillId, handle } } });
+  if (existing) {
+    await prisma.skillStar.delete({ where: { skillId_handle: { skillId, handle } } });
+  } else {
+    const skill = await prisma.skill.findUnique({ where: { id: skillId }, select: { id: true } });
+    if (!skill) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    await prisma.skillStar.create({ data: { skillId, handle } });
+  }
+  const starCount = await prisma.skillStar.count({ where: { skillId } });
+  res.json({ starred: !existing, starCount });
+});
+
+app.post('/api/skill-library/by-slug/:slug/install', async (req, res) => {
+  try {
+    await prisma.skill.update({ where: { slug: req.params.slug }, data: { installCount: { increment: 1 } } });
+    res.json({ ok: true });
+  } catch {
+    res.status(404).json({ error: 'not found' });
+  }
 });
 
 // --- Own dashboard -----------------------------------------------------------

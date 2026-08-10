@@ -45,6 +45,10 @@ export type PublicProfile = {
   handle: string;
   displayName: string;
   bio: string | null;
+  avatarUrl: string | null;
+  websiteUrl: string | null;
+  githubUrl: string | null;
+  xUrl: string | null;
   createdAtMs: number;
   standing: Standing;
   streak: number;
@@ -99,14 +103,49 @@ export type SeasonCurrent = {
   ghosts: unknown[];
 };
 
+export type SkillJson = {
+  id: string;
+  handle: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  content: string;
+  installCount: number;
+  starCount: number;
+  createdAtMs: number;
+  isStarredByMe?: boolean;
+};
+
+export type SkillDetail = SkillJson & { isStarredByMe: boolean };
+
 export const api = {
   health: () => request<{ ok: boolean; streams: number }>('/health'),
 
   createProfile: (body: { handle: string; displayName: string; bio?: string; publicSkills?: boolean }) =>
     request<{ handle: string; token: string }>('/api/profiles', { method: 'POST', body: JSON.stringify(body) }),
 
-  updateMyProfile: (token: string, body: { displayName: string; bio?: string; publicSkills?: boolean }) =>
-    request<{ handle: string; displayName: string; bio: string | null; publicSkills: boolean }>('/api/me/profile', {
+  updateMyProfile: (
+    token: string,
+    body: {
+      displayName: string;
+      bio?: string;
+      publicSkills?: boolean;
+      avatarUrl?: string;
+      websiteUrl?: string;
+      githubUrl?: string;
+      xUrl?: string;
+    },
+  ) =>
+    request<{
+      handle: string;
+      displayName: string;
+      bio: string | null;
+      publicSkills: boolean;
+      avatarUrl: string | null;
+      websiteUrl: string | null;
+      githubUrl: string | null;
+      xUrl: string | null;
+    }>('/api/me/profile', {
       method: 'PATCH',
       token,
       body: JSON.stringify(body),
@@ -131,6 +170,18 @@ export const api = {
   mySessions: (token: string) => request<MeSessions>('/api/me/sessions', { token }),
 
   seasonCurrent: () => request<SeasonCurrent>('/api/season/current'),
+
+  skillLibrary: (sort?: 'stars' | 'recent', token?: string) =>
+    request<{ skills: SkillJson[] }>(`/api/skill-library${sort ? `?sort=${sort}` : ''}`, { token }),
+
+  skillBySlug: (slug: string, token?: string) =>
+    request<SkillDetail>(`/api/skill-library/by-slug/${encodeURIComponent(slug)}`, { token }),
+
+  createSkill: (token: string, body: { name: string; description?: string; content: string }) =>
+    request<SkillJson>('/api/skill-library', { method: 'POST', token, body: JSON.stringify(body) }),
+
+  toggleSkillStar: (token: string, id: string) =>
+    request<{ starred: boolean; starCount: number }>(`/api/skill-library/${id}/star`, { method: 'POST', token }),
 };
 
 export function liveStreamUrl(): string {
