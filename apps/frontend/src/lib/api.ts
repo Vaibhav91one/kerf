@@ -58,6 +58,8 @@ export type PublicProfile = {
   projects: ProjectJson[];
 };
 
+export type ClerkProfileResponse = { profile: Pick<PublicProfile, 'handle' | 'displayName' | 'bio' | 'publicSkills' | 'avatarUrl' | 'websiteUrl' | 'githubUrl' | 'xUrl' | 'createdAtMs'> | null };
+
 export type ProjectJson = {
   id: string;
   handle: string;
@@ -118,8 +120,66 @@ export type SkillJson = {
 
 export type SkillDetail = SkillJson & { isStarredByMe: boolean };
 
+export type OwnProfile = {
+  handle: string;
+  displayName: string;
+  bio: string | null;
+  publicSkills: boolean;
+  avatarUrl: string | null;
+  websiteUrl: string | null;
+  githubUrl: string | null;
+  xUrl: string | null;
+  createdAtMs: number;
+};
+
 export const api = {
   health: () => request<{ ok: boolean; streams: number }>('/health'),
+
+  clerkMe: (token: string) => request<{ profile: OwnProfile | null }>('/api/clerk/me', { token }),
+
+  upsertClerkProfile: (
+    token: string,
+    body: {
+      handle?: string;
+      displayName: string;
+      bio?: string;
+      publicSkills?: boolean;
+      avatarUrl?: string;
+      websiteUrl?: string;
+      githubUrl?: string;
+      xUrl?: string;
+    },
+  ) =>
+    request<{ profile: OwnProfile }>('/api/clerk/profile', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  saveClerkProfile: (
+    token: string,
+    body: {
+      handle?: string;
+      displayName: string;
+      bio?: string;
+      publicSkills?: boolean;
+      avatarUrl?: string;
+      websiteUrl?: string;
+      githubUrl?: string;
+      xUrl?: string;
+    },
+  ) =>
+    request<{ profile: OwnProfile }>('/api/clerk/profile', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  issueClerkApiToken: (token: string) =>
+    request<{ handle: string; token: string }>('/api/clerk/api-token', { method: 'POST', token }),
+
+  claimCliLogin: (token: string, code: string) =>
+    request<{ status: 'claimed'; handle: string }>(`/api/cli-login/${encodeURIComponent(code)}/claim`, { method: 'POST', token }),
 
   createProfile: (body: { handle: string; displayName: string; bio?: string; publicSkills?: boolean }) =>
     request<{ handle: string; token: string }>('/api/profiles', { method: 'POST', body: JSON.stringify(body) }),

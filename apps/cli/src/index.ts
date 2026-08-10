@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { spawn } from 'node:child_process';
 import { computeSessionMetric, type Heartbeat } from '@kerf/shared';
 import { extractAll } from './extract.ts';
 import { uploadMetrics, sendHeartbeat } from './upload.ts';
@@ -11,27 +12,112 @@ import { uploadMetrics, sendHeartbeat } from './upload.ts';
 const { positionals } = parseArgs({ allowPositionals: true });
 const command = positionals[0];
 
+const DEFAULT_API_URL = 'https://backend-2cf9-3000.prg1.zerops.app';
+const DEFAULT_DASHBOARD_URL = 'https://frontend-2cf9-3000.prg1.zerops.app';
+const CONFIG_PATH = process.env.KERF_CONFIG ?? process.env.KERF_CONFIG_PATH ?? join(homedir(), '.kerf', 'config.json');
+
+type KerfConfig = {
+  apiUrl: string;
+  dashboardUrl: string;
+  token: string;
+  handle: string;
+};
+
 async function readMetrics() {
   const bySession = await extractAll();
   return [...bySession.entries()].map(([sessionId, events]) => computeSessionMetric(sessionId, events));
 }
 
-function requireEnv(): { apiUrl: string; token: string } {
-  const apiUrl = process.env.KERF_API_URL;
-  const token = process.env.KERF_TOKEN;
-  if (!apiUrl || !token) {
-    console.error('KERF_API_URL and KERF_TOKEN must be set');
+function readConfig(): KerfConfig | null {
+  if (!existsSync(CONFIG_PATH)) return null;
+  try {
+    return JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) as KerfConfig;
+  } catch {
+    return null;
+  }
+}
+
+function writeConfig(config: KerfConfig) {
+  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+  writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+}
+
+function configuredApiUrl(): string {
+  return process.env.KERF_API_URL ?? readConfig()?.apiUrl ?? DEFAULT_API_URL;
+}
+
+function configuredDashboardUrl(): string {
+  return process.env.KERF_DASHBOARD_URL ?? readConfig()?.dashboardUrl ?? DEFAULT_DASHBOARD_URL;
+}
+
+function requireAuth(): { apiUrl: string; token: string } {
+  const config = readConfig();
+  const apiUrl = process.env.KERF_API_URL ?? config?.apiUrl ?? DEFAULT_API_URL;
+  const token = process.env.KERF_TOKEN ?? config?.token;
+  if (!token) {
+    console.error('not logged in — run `kerf login` or set KERF_TOKEN');
     process.exit(1);
   }
   return { apiUrl, token };
 }
 
+function openBrowser(url: string) {
+  const command =
+    process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
+  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+  try {
+    const child = spawn(command, args, { stdio: 'ignore', detached: true });
+    child.unref();
+  } catch {
+    // The printed URL is the fallback.
+  }
+}
+
+async function login() {
+  const apiUrl = configuredApiUrl();
+  const dashboardUrl = configuredDashboardUrl();
+  const started = await fetch(`${apiUrl}/api/cli-login/start`, { method: 'POST' });
+  if (!started.ok) {
+    console.error(`login failed to start: ${started.status} ${started.statusText}`);
+    process.exit(1);
+  }
+  const { code, expiresAtMs } = (await started.json()) as { code: string; expiresAtMs: number };
+  const connectUrl = `${dashboardUrl}/cli/connect?code=${encodeURIComponent(code)}`;
+  console.log(`opening ${connectUrl}`);
+  console.log('if the browser does not open, paste that URL into Chrome');
+  openBrowser(connectUrl);
+
+  for (;;) {
+    if (Date.now() > expiresAtMs) {
+      console.error('login expired — run `kerf login` again');
+      process.exit(1);
+    }
+    await sleep(2000);
+    const polled = await fetch(`${apiUrl}/api/cli-login/${encodeURIComponent(code)}`);
+    if (polled.status === 404) {
+      console.error('login expired — run `kerf login` again');
+      process.exit(1);
+    }
+    if (!polled.ok) continue;
+    const body = (await polled.json()) as { status: 'pending' | 'claimed'; handle?: string; token?: string };
+    if (body.status !== 'claimed') continue;
+    if (!body.handle || !body.token) {
+      console.error('login response was malformed');
+      process.exit(1);
+    }
+    writeConfig({ apiUrl, dashboardUrl, handle: body.handle, token: body.token });
+    console.log(`logged in as @${body.handle}`);
+    console.log(`config written → ${CONFIG_PATH}`);
+    return;
+  }
+}
+
 if (command === 'sync') {
-  const { apiUrl, token } = requireEnv();
+  const { apiUrl, token } = requireAuth();
   const result = await uploadMetrics(apiUrl, token, await readMetrics());
   console.log(`uploaded ${result.accepted} sessions, ${result.rejected.length} rejected`);
 } else if (command === 'live') {
-  const { apiUrl, token } = requireEnv();
+  const { apiUrl, token } = requireAuth();
   const BEAT_MS = 15_000;
   // A session counts as in-flight if its last event is newer than this. Two
   // beats' worth of slack, so a slow turn doesn't blink the tile off and on.
@@ -68,13 +154,9 @@ if (command === 'sync') {
     console.error('usage: kerf skill install <slug>');
     process.exit(1);
   }
-  const apiUrl = process.env.KERF_API_URL;
-  if (!apiUrl) {
-    console.error('KERF_API_URL must be set');
-    process.exit(1);
-  }
+  const apiUrl = configuredApiUrl();
 
-  const res = await fetch(`${apiUrl}/api/skill-library/by-slug/${slug}`);
+  const res = await fetch(`${apiUrl}/api/skill-library/by-slug/${encodeURIComponent(slug)}`);
   if (res.status === 404) {
     console.error(`no skill published at slug "${slug}"`);
     process.exit(1);
@@ -92,11 +174,24 @@ if (command === 'sync') {
 
   // Best-effort — one unreachable server must not fail an install that already
   // wrote the file to disk.
-  await fetch(`${apiUrl}/api/skill-library/by-slug/${skill.slug}/install`, { method: 'POST' }).catch((err) =>
+  await fetch(`${apiUrl}/api/skill-library/by-slug/${encodeURIComponent(skill.slug)}/install`, { method: 'POST' }).catch((err) =>
     console.error(`install-count bump failed: ${err.message}`),
   );
 
   console.log(`installed → ${dest}`);
+} else if (command === 'login') {
+  await login();
+} else if (command === 'logout') {
+  rmSync(CONFIG_PATH, { force: true });
+  console.log(`logged out — removed ${CONFIG_PATH}`);
+} else if (command === 'whoami') {
+  const config = readConfig();
+  if (!config) {
+    console.log('not logged in');
+    process.exit(1);
+  }
+  console.log(`@${config.handle}`);
+  console.log(config.apiUrl);
 } else {
   const metrics = await readMetrics();
   const qualifying = metrics.filter((m) => m.qualifies);

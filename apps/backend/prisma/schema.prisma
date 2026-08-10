@@ -56,6 +56,7 @@ model SessionMetric {
 
 model Profile {
   handle      String  @id
+  clerkUserId String? @unique @map("clerk_user_id")
   displayName String  @map("display_name")
   bio         String?
   // Opt-in: skill names are §6-safe to store, which is a different question
@@ -68,7 +69,7 @@ model Profile {
   xUrl        String?  @map("x_url")
   // sha256 of the account's CLI token. The raw token is shown once, at
   // creation, and never stored — a leaked DB dump must not be a set of keys.
-  tokenHash   String   @unique @map("token_hash")
+  tokenHash   String?  @unique @map("token_hash")
   createdAt   DateTime @default(now()) @map("created_at")
 
   sessions   SessionMetric[]
@@ -77,8 +78,26 @@ model Profile {
   live       LiveSession[]
   skills     Skill[]
   skillStars SkillStar[]
+  apiTokens  ApiToken[]
 
   @@map("profiles")
+}
+
+// Extra per-client tokens. `profiles.token_hash` remains for backwards
+// compatibility with the original "shown once" dashboard token, while
+// `api_tokens` lets `kerf login` mint a CLI-specific token without invalidating
+// the dashboard session.
+model ApiToken {
+  id        String   @id @default(uuid())
+  handle    String
+  tokenHash String   @unique @map("token_hash")
+  label     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  owner Profile @relation(fields: [handle], references: [handle], onDelete: Cascade)
+
+  @@index([handle])
+  @@map("api_tokens")
 }
 
 // A published Claude Code Skill — same Path B rule as everything else in this

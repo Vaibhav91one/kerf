@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto';
+import { clerkMiddleware } from '@clerk/express';
 import express from 'express';
 import type { SessionMetric } from '@kerf/shared';
 import { tierCuts, tierForValue, improvementTips, badges, currentStreak, tierProgress, LIVE_TTL_MS } from '@kerf/shared';
 import { prisma } from './db.ts';
-import { bearerAuth, seedEnvProfile, tokenHash, type AuthedRequest } from './auth.ts';
+import { bearerAuth, clerkAuth, getClerkUserId, seedEnvProfile, tokenHash, type AuthedRequest } from './auth.ts';
 import {
   validateSessionMetric,
   validateHeartbeat,
@@ -15,8 +16,6 @@ import {
 import { publish, subscribe, subscriberCount } from './live.ts';
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
-
 // Bearer-token auth, not cookies, so a wildcard origin carries no CSRF risk.
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,6 +24,9 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+const clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+if (process.env.CLERK_SECRET_KEY) app.use(clerkMiddleware({ publishableKey: clerkPublishableKey }));
+app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, streams: subscriberCount() });
@@ -212,11 +214,70 @@ app.get('/api/chat', async (_req, res) => {
 
 // --- Accounts & profiles -----------------------------------------------------
 
+const CLI_LOGIN_TTL_MS = 10 * 60_000;
+const cliLogins = new Map<
+  string,
+  {
+    expiresAtMs: number;
+    handle?: string;
+    token?: string;
+    claimedAtMs?: number;
+  }
+>();
+
+function pruneCliLogins(nowMs = Date.now()) {
+  for (const [code, session] of cliLogins) {
+    if (session.expiresAtMs <= nowMs || (session.claimedAtMs && nowMs - session.claimedAtMs > 60_000)) {
+      cliLogins.delete(code);
+    }
+  }
+}
+
+function profileJson(p: {
+  handle: string;
+  displayName: string;
+  bio: string | null;
+  publicSkills: boolean;
+  avatarUrl: string | null;
+  websiteUrl: string | null;
+  githubUrl: string | null;
+  xUrl: string | null;
+  createdAt: Date;
+}) {
+  return {
+    handle: p.handle,
+    displayName: p.displayName,
+    bio: p.bio,
+    publicSkills: p.publicSkills,
+    avatarUrl: p.avatarUrl,
+    websiteUrl: p.websiteUrl,
+    githubUrl: p.githubUrl,
+    xUrl: p.xUrl,
+    createdAtMs: p.createdAt.getTime(),
+  };
+}
+
+async function mintApiToken(handle: string, label: string): Promise<string> {
+  const token = randomBytes(32).toString('hex');
+  await prisma.apiToken.create({
+    data: {
+      handle,
+      tokenHash: tokenHash(token),
+      label,
+    },
+  });
+  return token;
+}
+
 /**
  * Claim a handle and get a CLI token. The token is returned exactly once and
  * stored only as a sha256 digest — there is no endpoint that can show it again.
  */
 app.post('/api/profiles', async (req, res) => {
+  if (process.env.CLERK_SECRET_KEY) {
+    res.status(410).json({ error: 'use Clerk sign-in to create a profile' });
+    return;
+  }
   const result = validateProfileInput(req.body);
   if (!result.ok) {
     res.status(400).json({ error: result.reason });
@@ -235,9 +296,110 @@ app.post('/api/profiles', async (req, res) => {
   res.status(201).json({ handle, token });
 });
 
+app.get('/api/clerk/me', clerkAuth, async (req: AuthedRequest, res) => {
+  const clerkUserId = req.clerkUserId as string;
+  const profile = await prisma.profile.findUnique({ where: { clerkUserId } });
+  res.json({ profile: profile ? profileJson(profile) : null });
+});
+
+app.post('/api/clerk/profile', clerkAuth, async (req: AuthedRequest, res) => {
+  const clerkUserId = req.clerkUserId as string;
+  const existing = await prisma.profile.findUnique({ where: { clerkUserId } });
+  const result = validateProfileInput(existing ? { ...req.body, handle: existing.handle } : req.body);
+  if (!result.ok) {
+    res.status(400).json({ error: result.reason });
+    return;
+  }
+
+  const { handle, displayName, bio, publicSkills, avatarUrl, websiteUrl, githubUrl, xUrl } = result.value;
+  if (!existing) {
+    const taken = await prisma.profile.findUnique({ where: { handle }, select: { handle: true, clerkUserId: true } });
+    if (taken) {
+      res.status(409).json({ error: 'handle taken' });
+      return;
+    }
+  }
+
+  const profile = existing
+    ? await prisma.profile.update({
+        where: { handle: existing.handle },
+        data: { displayName, bio, publicSkills, avatarUrl, websiteUrl, githubUrl, xUrl },
+      })
+    : await prisma.profile.create({
+        data: { handle, clerkUserId, displayName, bio, publicSkills, avatarUrl, websiteUrl, githubUrl, xUrl },
+      });
+  res.status(existing ? 200 : 201).json({ profile: profileJson(profile) });
+});
+
+app.post('/api/clerk/api-token', clerkAuth, async (req: AuthedRequest, res) => {
+  const profile = await prisma.profile.findUnique({
+    where: { clerkUserId: req.clerkUserId as string },
+    select: { handle: true },
+  });
+  if (!profile) {
+    res.status(409).json({ error: 'profile required' });
+    return;
+  }
+  const token = await mintApiToken(profile.handle, 'dashboard session');
+  res.json({ handle: profile.handle, token });
+});
+
+app.post('/api/cli-login/start', (_req, res) => {
+  pruneCliLogins();
+  const code = randomBytes(18).toString('base64url');
+  const expiresAtMs = Date.now() + CLI_LOGIN_TTL_MS;
+  cliLogins.set(code, { expiresAtMs });
+  res.status(201).json({ code, expiresAtMs });
+});
+
+app.get('/api/cli-login/:code', (req, res) => {
+  pruneCliLogins();
+  const code = req.params.code as string;
+  const session = cliLogins.get(code);
+  if (!session) {
+    res.status(404).json({ status: 'expired' });
+    return;
+  }
+  if (!session.token || !session.handle) {
+    res.json({ status: 'pending', expiresAtMs: session.expiresAtMs });
+    return;
+  }
+  cliLogins.delete(code);
+  res.json({ status: 'claimed', handle: session.handle, token: session.token });
+});
+
+app.post('/api/cli-login/:code/claim', clerkAuth, async (req: AuthedRequest, res) => {
+  pruneCliLogins();
+  const code = req.params.code as string;
+  const session = cliLogins.get(code);
+  if (!session) {
+    res.status(404).json({ error: 'login code expired' });
+    return;
+  }
+  if (session.token) {
+    res.status(409).json({ error: 'login code already claimed' });
+    return;
+  }
+  const profile = await prisma.profile.findUnique({
+    where: { clerkUserId: req.clerkUserId as string },
+    select: { handle: true },
+  });
+  if (!profile) {
+    res.status(409).json({ error: 'profile required' });
+    return;
+  }
+
+  const token = await mintApiToken(profile.handle, 'kerf login');
+  session.handle = profile.handle;
+  session.token = token;
+  session.claimedAtMs = Date.now();
+  cliLogins.set(code, session);
+  res.json({ status: 'claimed', handle: profile.handle });
+});
+
 app.patch('/api/me/profile', bearerAuth, async (req: AuthedRequest, res) => {
   const handle = req.handle as string;
-  const result = validateProfileInput({ handle, ...req.body });
+  const result = validateProfileInput({ ...req.body, handle });
   if (!result.ok) {
     res.status(400).json({ error: result.reason });
     return;
@@ -433,8 +595,15 @@ function slugify(name: string): string {
 async function optionalHandle(req: express.Request): Promise<string | null> {
   const parts = (req.header('authorization') ?? '').split(' ');
   if (parts.length !== 2 || parts[0] !== 'Bearer' || !parts[1]) return null;
-  const profile = await prisma.profile.findUnique({ where: { tokenHash: tokenHash(parts[1]) }, select: { handle: true } });
-  return profile?.handle ?? null;
+  const hash = tokenHash(parts[1]);
+  const apiToken = await prisma.apiToken.findUnique({ where: { tokenHash: hash }, select: { handle: true } });
+  if (apiToken) return apiToken.handle;
+  const profile = await prisma.profile.findUnique({ where: { tokenHash: hash }, select: { handle: true } });
+  if (profile) return profile.handle;
+  const clerkUserId = getClerkUserId(req);
+  if (!clerkUserId) return null;
+  const clerkProfile = await prisma.profile.findUnique({ where: { clerkUserId }, select: { handle: true } });
+  return clerkProfile?.handle ?? null;
 }
 
 function toSkillJson(s: {

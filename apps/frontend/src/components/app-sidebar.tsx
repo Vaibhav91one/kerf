@@ -43,16 +43,16 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
 
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="icon" className="border-sidebar-border/70" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link href="/" />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-mono font-bold">
+              <div className="flex aspect-square size-9 items-center justify-center rounded-2xl bg-sidebar-primary text-sidebar-primary-foreground font-mono font-bold shadow-sm">
                 K
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">Kerf</span>
+                <span className="truncate font-semibold tracking-tight">Kerf</span>
                 <span className="truncate text-xs text-sidebar-foreground/60">rework ratio league</span>
               </div>
             </SidebarMenuButton>
@@ -65,7 +65,12 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenu>
             {platform.map((item) => (
               <SidebarMenuItem key={item.url}>
-                <SidebarMenuButton render={<Link href={item.url} />} isActive={pathname === item.url} tooltip={item.title}>
+                <SidebarMenuButton
+                  render={<Link href={item.url} />}
+                  isActive={pathname === item.url}
+                  tooltip={item.title}
+                  className="rounded-full data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold"
+                >
                   <item.icon />
                   <span>{item.title}</span>
                 </SidebarMenuButton>
@@ -78,7 +83,12 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenu>
             {buildInPublic.map((item) => (
               <SidebarMenuItem key={item.url}>
-                <SidebarMenuButton render={<Link href={item.url} />} isActive={pathname === item.url} tooltip={item.title}>
+                <SidebarMenuButton
+                  render={<Link href={item.url} />}
+                  isActive={pathname === item.url}
+                  tooltip={item.title}
+                  className="rounded-full data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold"
+                >
                   <item.icon />
                   <span>{item.title}</span>
                 </SidebarMenuButton>

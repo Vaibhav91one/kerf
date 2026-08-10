@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ClerkProvider } from '@clerk/nextjs';
 import { SUSE, SUSE_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth';
@@ -22,12 +23,17 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
+  const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const app = (
+    <AuthProvider disabled={!clerkKey}>
+      <TooltipProvider>{children}</TooltipProvider>
+    </AuthProvider>
+  );
+
   return (
     <html lang="en" className={`${suse.variable} ${suseMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <AuthProvider>
-          <TooltipProvider>{children}</TooltipProvider>
-        </AuthProvider>
+        {clerkKey ? <ClerkProvider publishableKey={clerkKey}>{app}</ClerkProvider> : app}
       </body>
     </html>
   );

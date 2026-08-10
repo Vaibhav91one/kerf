@@ -24,13 +24,15 @@ edit it.
 - `apps/cli` — extractor. Reads `~/.claude/projects` JSONL only (default profile — user has other
   `.claude-*` profile dirs on their machine, deliberately excluded), computes
   `SessionMetric`. `kerf sync` uploads finished sessions; `kerf live` beats every 15s for
-  in-flight ones (`POST /api/heartbeat`).
-- `apps/backend` — Express + Prisma + Postgres. Per-account bearer tokens (raw token shown once,
-  only its sha256 digest is stored). No `event` table, by design (privacy: raw events never leave
-  the user's machine). Tables: `session_metrics`, `profiles`, `live_sessions`, `projects`,
-  `chat_messages`, `skills_library`, `skill_stars` — no persisted `season` (tier cuts computed
-  live). Real-time is SSE (`GET /api/live/stream`), fanned out by an in-process `EventEmitter` in
-  `src/live.ts`.
+  in-flight ones (`POST /api/heartbeat`). `kerf login` starts the browser/device flow, opens the
+  dashboard, and stores the issued API token in `~/.kerf/config.json`; `kerf logout` removes it.
+- `apps/backend` — Express + Prisma + Postgres. Clerk Google auth owns dashboard identity; CLI/API
+  auth uses per-account API tokens minted after Clerk sign-in (raw token shown once, only sha256
+  digest stored). Legacy token lookup is left as a compatibility fallback. No `event` table, by
+  design (privacy: raw events never leave the user's machine). Tables: `session_metrics`,
+  `profiles`, `api_tokens`, `live_sessions`, `projects`, `chat_messages`, `skills_library`,
+  `skill_stars` — no persisted `season` (tier cuts computed live). Real-time is SSE
+  (`GET /api/live/stream`), fanned out by an in-process `EventEmitter` in `src/live.ts`.
 - `apps/frontend` — Next.js dashboard. **Gate cleared 2026-08-09**: Tailwind + shadcn/ui with the
   `sidebar-07` shell, SUSE + SUSE Mono type. Nine wireframed routes (`/`, `/live`, `/u/[handle]`,
   `/skills`, `/projects`, `/me`, `/season`, `/insights`, plus the empty state) — see `BUILD_LOG.md`
@@ -80,12 +82,14 @@ fine; printing the actual prompt/response text is not.
 ## Verification state
 
 `packages/shared`, `apps/cli` and `apps/backend` are typechecked and unit-tested (`node --test`):
-33 shared / 28 backend / 1 cli cases pass. The extractor is verified end-to-end against the user's
+39 shared / 33 backend / 1 cli cases pass. The extractor is verified end-to-end against the user's
 real `~/.claude/projects` corpus (27 sessions parsed, 7 qualify, avg rework ratio 0.369 as of last
 run — re-run `node apps/cli/src/index.ts` to refresh). The backend is verified against a real local
 Postgres end-to-end (`scripts/e2e.mjs` — needs `scripts/db.sh up` and a booted server): SSE fan-out, per-account token auth, the
 cross-account overwrite guard, chat rate limiting, and both privacy gates rejecting a smuggled
-free-text field. `apps/frontend` is wireframed but not yet built.
+free-text field. Clerk mode is smoke-tested locally: `/api/cli-login/start` returns a pending login,
+and unauthenticated claim returns 401 rather than silently falling back. The production frontend is
+built and deployed on Zerops.
 
 ## Diagrams and wireframes
 

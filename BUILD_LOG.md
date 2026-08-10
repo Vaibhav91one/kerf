@@ -388,23 +388,44 @@ Live URLs:
 - Frontend: https://frontend-2cf9-3000.prg1.zerops.app
 - Backend: https://backend-2cf9-3000.prg1.zerops.app
 
-### Known auth-flow gap
+### Clerk Google auth + CLI login
 
-The current CLI auth flow is still manual: `/me` creates/shows a token once, then the user exports
-`KERF_API_URL` and `KERF_TOKEN` before running `kerf sync` / `kerf live`. The better product flow the
-user described is not implemented yet:
+User rejected the manual token UX and asked for Clerk with Google auth before continuing. Created a
+separate Clerk application named **Kerf** (not the pre-existing Clerk apps in the account) and wired
+the platform around that app:
 
 ```text
 kerf login
   → browser opens dashboard connect flow
-  → user claims/selects profile
-  → CLI receives/stores token locally
+  → user signs in with Clerk / Google
+  → user claims/selects a Kerf handle
+  → backend mints a per-account API token
+  → CLI stores it locally in ~/.kerf/config.json
   → kerf sync/live use stored auth automatically
 ```
 
-Implementing that needs a device-code or local-callback login handshake plus local config storage
-(`~/.kerf/config.json`) and `kerf logout`.
+- `apps/frontend`: added `@clerk/nextjs`, `src/proxy.ts`, `ClerkProvider`, `/cli/connect`, and
+  Clerk-backed `/me` profile connect/update flow. The UI keeps the Material 3/SUSE/sidebar shell.
+- `apps/backend`: added `@clerk/express`; `profiles.clerk_user_id`; `api_tokens` table; Clerk-only
+  profile upsert; and a 10-minute CLI login handshake:
+  `POST /api/cli-login/start`, `GET /api/cli-login/:code`, `POST /api/cli-login/:code/claim`.
+  Express Clerk middleware is configured with the same Kerf publishable key used by the frontend;
+  otherwise `@clerk/express` fails even when `CLERK_SECRET_KEY` is present.
+- `apps/cli`: added `kerf login`, `kerf logout`, `kerf whoami`, local config storage, browser-open
+  fallback printing, and config-backed `sync`/`live` auth. Manual `KERF_TOKEN` still works as an
+  override for dev/compatibility.
+- Zerops project env now has the Kerf Clerk app keys as project-level variables, inherited by
+  frontend build/runtime and backend runtime.
+
+Local verification before deploy:
+
+- `pnpm -r typecheck` clean.
+- `pnpm -r test` clean: 39/39 shared, 33/33 backend, 1/1 CLI.
+- Production frontend build with Clerk env clean; only warning is the existing SUSE Mono fallback
+  metrics warning.
+- Local Clerk smoke: `/api/cli-login/start` returns pending; unauthenticated claim returns 401
+  `not signed in` (proves Clerk middleware is configured) instead of 503/500.
 
 ### Next
 
-- Build `kerf login` / `kerf logout` and remove the manual token setup from the primary UX.
+- Commit, push, redeploy backend + frontend, then verify live Clerk Google sign-in and `kerf login`.
