@@ -461,7 +461,22 @@ Verification:
 - Live backend pre-deploy smoke still healthy: `/health` 200, `/api/season/current` 200,
   `POST /api/cli-login/start` 201.
 
-### Next
+Post-deploy verification:
 
-- Commit, push, redeploy backend + frontend, then verify live public pages, Clerk Google sign-in,
-  and `kerf login`.
+- Committed and pushed: `761ebad fix: make Clerk auth public-first`.
+- Redeployed backend and frontend through Zerops; `postgresql`, `backend`, and `frontend` all report
+  `ACTIVE`.
+- Live frontend routes verified 200: `/`, `/me`, `/season`, `/skills`, `/projects`, `/live`,
+  `/insights`, `/cli/connect`.
+- Live backend verified: `/health` 200; `POST /api/cli-login/start` returns a code.
+- Chrome DevTools verified fresh `/` page loads the public Home state with `kerf login`, `kerf sync`,
+  `kerf live`, plus "Sign in when ready" and "Explore live feed" CTAs.
+- Chrome DevTools verified fresh `/me` page loads inside the app shell and shows "Sign in with
+  Google" / "Continue with Google"; no server-side Clerk handshake error.
+- Real `KERF_CONFIG=/tmp/kerf-login-prod-test.json node apps/cli/src/index.ts login` verified the
+  CLI handoff opens `/cli/connect?code=...`; the live connect page shows "Connect Kerf CLI" and
+  "Continue with Google". Full completion requires the user to finish Google auth interactively.
+
+Known follow-up: current Clerk keys are development/test keys, so Clerk logs a browser warning about
+development keys on production URLs. Functionality is live, but a production hardening pass should
+switch the separate Kerf Clerk app to production keys/custom production settings.
