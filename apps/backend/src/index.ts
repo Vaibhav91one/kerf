@@ -752,9 +752,10 @@ app.post('/api/skill-library/:id/star', requireMember, async (req: AuthedRequest
   res.json({ starred: !existing, starCount });
 });
 
-app.post('/api/skill-library/by-slug/:slug/install', async (req, res) => {
+app.post('/api/skill-library/by-slug/:slug/install', requireMember, async (req, res) => {
+  const slug = req.params.slug as string;
   try {
-    await prisma.skill.update({ where: { slug: req.params.slug }, data: { installCount: { increment: 1 } } });
+    await prisma.skill.update({ where: { slug }, data: { installCount: { increment: 1 } } });
     res.json({ ok: true });
   } catch {
     res.status(404).json({ error: 'not found' });

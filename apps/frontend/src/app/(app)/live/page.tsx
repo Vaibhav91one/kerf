@@ -62,7 +62,7 @@ function LiveTile({
     <div className="h-[180px] rounded-[16px] border border-border bg-card px-[18px] pt-[15px]">
       <div className="flex items-baseline gap-2">
         <span className="size-2 shrink-0 self-center rounded-full bg-live" />
-        <Link href={`/u/${s.handle}`} className="text-[15px] font-semibold text-foreground hover:underline">
+        <Link href={`/people/${s.handle}`} className="text-[15px] font-semibold text-foreground hover:underline">
           @{s.handle}
         </Link>
         <span className="ml-auto font-mono text-[11px] text-muted-foreground">{elapsed(nowMs - s.startedMs)}</span>
@@ -233,7 +233,7 @@ export default function LivePage() {
             <div className="mt-[22px]">
               {recentlyEnded.map((e) => (
                 <div key={e.sessionId} className="flex py-[7px] text-[13px]">
-                  <Link href={`/u/${e.handle}`} className="w-[182px] font-medium text-foreground hover:underline">
+                  <Link href={`/people/${e.handle}`} className="w-[182px] font-medium text-foreground hover:underline">
                     @{e.handle}
                   </Link>
                   <span className="w-[160px] font-mono text-muted-foreground">{elapsed(e.durationMs)}</span>
@@ -270,7 +270,7 @@ export default function LivePage() {
           <div ref={scrollRef} className="mt-[18px] flex-1 space-y-[20px] overflow-y-auto pr-1">
             {messages.map((m) => (
               <div key={m.id}>
-                <Link href={`/u/${m.handle}`} className="text-[12px] font-semibold text-foreground hover:underline">
+                <Link href={`/people/${m.handle}`} className="text-[12px] font-semibold text-foreground hover:underline">
                   @{m.handle}
                 </Link>
                 <p className="mt-[5px] max-w-[296px] text-[13px] leading-[17px] text-muted-foreground">{m.body}</p>

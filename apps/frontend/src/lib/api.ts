@@ -61,14 +61,10 @@ export type PublicProfile = {
 };
 
 /** Row shape of the public directory — GET /api/profiles in apps/backend/src/index.ts. */
-export type ProfileSummary = {
-  handle: string;
-  displayName: string;
-  bio: string | null;
-  publicSkills: boolean;
-  avatarUrl: string | null;
-  createdAtMs: number;
-};
+export type PublicProfileSummary = Pick<
+  PublicProfile,
+  'handle' | 'displayName' | 'bio' | 'publicSkills' | 'avatarUrl' | 'createdAtMs'
+>;
 
 export type ClerkProfileResponse ={ profile: Pick<PublicProfile, 'handle' | 'displayName' | 'bio' | 'publicSkills' | 'avatarUrl' | 'websiteUrl' | 'githubUrl' | 'xUrl' | 'createdAtMs'> | null };
 
@@ -238,9 +234,10 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  profiles: () => request<{ profiles: ProfileSummary[] }>('/api/profiles'),
+  profiles: () => request<{ profiles: PublicProfileSummary[] }>('/api/profiles'),
 
   profile: (handle: string) => request<PublicProfile>(`/api/profiles/${encodeURIComponent(handle)}`),
+
 
   skills: () => request<{ skills: SkillTotal[] }>('/api/skills'),
 

@@ -94,7 +94,7 @@ export default function SkillsPage() {
             </p>
             <div className="mt-[16px] space-y-4">
               {(focus?.topUsers ?? []).map((u) => (
-                <Link key={u.handle} href={`/u/${u.handle}`} className="flex items-center gap-[10px]">
+                <Link key={u.handle} href={`/people/${u.handle}`} className="flex items-center gap-[10px]">
                   <Avatar handle={u.handle} size={28} className="shrink-0 rounded-full" />
                   <span className="flex-1 text-[13px] font-medium text-foreground hover:underline">@{u.handle}</span>
                   <span className="font-mono text-[13px] text-muted-foreground">{u.count}</span>

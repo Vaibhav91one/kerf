@@ -126,7 +126,7 @@ export default function SeasonPage() {
                 <tr key={s.handle} className={own ? 'bg-card' : undefined}>
                   <td className={`rounded-l-[12px] py-[11px] font-mono text-[13px] ${tone}`}>{i + 1}</td>
                   <td className={`py-[11px] text-[13px] ${tone}`}>
-                    <Link href={`/u/${s.handle}`} className="hover:underline">
+                    <Link href={`/people/${s.handle}`} className="hover:underline">
                       @{s.handle}
                     </Link>
                   </td>

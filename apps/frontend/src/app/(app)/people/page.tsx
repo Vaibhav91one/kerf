@@ -2,16 +2,16 @@
 
 // The People rail entry. There is no comp for a directory — the Figma board
 // draws the profile screen as the People destination — so this stays a plain
-// index in the same language and hands off to `/u/[handle]` immediately.
+// index in the same language and hands off to `/people/[handle]` immediately.
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { api, type LiveSessionJson, type ProfileSummary } from '@/lib/api';
+import { api, type LiveSessionJson, type PublicProfileSummary } from '@/lib/api';
 import { Avatar } from '@/components/kerf/artwork';
 import { PageHeader, Panel } from '@/components/kerf/ui';
 
 export default function PeoplePage() {
-  const [profiles, setProfiles] = useState<ProfileSummary[] | null>(null);
+  const [profiles, setProfiles] = useState<PublicProfileSummary[] | null>(null);
   const [live, setLive] = useState<LiveSessionJson[]>([]);
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export default function PeoplePage() {
           {profiles.map((p) => (
             <Link
               key={p.handle}
-              href={`/u/${p.handle}`}
+              href={`/people/${p.handle}`}
               className="rounded-[16px] border border-border bg-card p-5 transition-colors hover:border-primary"
             >
               <div className="flex items-center gap-4">

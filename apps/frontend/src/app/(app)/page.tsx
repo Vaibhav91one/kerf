@@ -43,7 +43,7 @@ function LiveTile({ s, projectName }: { s: LiveSessionJson; projectName: string 
     <div className="rounded-[16px] border border-border bg-card p-4">
       <div className="flex items-center gap-2">
         <span className="size-2 rounded-full bg-live" />
-        <Link href={`/u/${s.handle}`} className="text-[14px] font-semibold text-foreground hover:underline">
+        <Link href={`/people/${s.handle}`} className="text-[14px] font-semibold text-foreground hover:underline">
           @{s.handle}
         </Link>
       </div>
@@ -231,7 +231,7 @@ export default function HomePage() {
                 <tr key={s.handle}>
                   <td className={`py-[9px] font-mono text-[13px] ${tone}`}>{i + 1}</td>
                   <td className={`py-[9px] text-[13px] ${tone}`}>
-                    <Link href={`/u/${s.handle}`} className="hover:underline">
+                    <Link href={`/people/${s.handle}`} className="hover:underline">
                       @{s.handle}
                     </Link>
                   </td>

@@ -85,7 +85,7 @@ export default function ProjectsPage() {
               <ProjectsIcon size={20} className="absolute right-5 top-5 text-muted-foreground" />
               <p className="text-[18px] font-semibold leading-[22px] text-foreground">{p.name}</p>
               <Link
-                href={`/u/${p.handle}`}
+                href={`/people/${p.handle}`}
                 className="mt-[10px] block text-[12px] leading-[15px] text-muted-foreground hover:underline"
               >
                 @{p.handle}

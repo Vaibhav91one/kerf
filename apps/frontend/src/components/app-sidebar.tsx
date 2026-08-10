@@ -31,7 +31,7 @@ import {
   SkillsIcon,
 } from '@/components/kerf/icons';
 import { CliStatus } from '@/components/kerf/cli-status';
-import { ThemeToggle } from '@/components/kerf/theme-toggle';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 type NavItem = { title: string; url: string; icon: typeof HomeIcon; match?: (p: string) => boolean };
 
@@ -47,7 +47,7 @@ const BUILD_IN_PUBLIC: NavItem[] = [
   { title: 'Skills', url: '/skills', icon: SkillsIcon },
   // The comp marks People active on the public-profile screen, so a profile
   // route lights this row too.
-  { title: 'People', url: '/people', icon: PeopleIcon, match: (p) => p === '/people' || p.startsWith('/u/') },
+  { title: 'People', url: '/people', icon: PeopleIcon, match: (p) => p.startsWith('/people') || p.startsWith('/u/') },
 ];
 
 function NavRow({ item, active }: { item: NavItem; active: boolean }) {
@@ -119,6 +119,8 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <div className="mx-3 border-t border-sidebar-border pt-5">
           <div className="flex items-center gap-2.5 px-2">
             <CliStatus />
+          </div>
+          <div className="px-1 pt-2 group-data-[collapsible=icon]:hidden">
             <ThemeToggle />
           </div>
           <p className="px-2 pt-[11px] text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">

@@ -481,6 +481,35 @@ Known follow-up: current Clerk keys are development/test keys, so Clerk logs a b
 development keys on production URLs. Functionality is live, but a production hardening pass should
 switch the separate Kerf Clerk app to production keys/custom production settings.
 
+### People/profile + dark default + CLI Dialog polish
+
+User clarified three UI/auth details:
+
+- `/people` is the reusable public user surface; individual profiles now live at `/people/[handle]`.
+  The old `/u/[handle]` route redirects there for compatibility.
+- Dark mode is the default; light mode is optional through the sidebar toggle (`kerf.theme` in
+  localStorage).
+- `kerf login` browser authorization uses a shadcn Dialog and redirects the browser to `/me?cli=connected`
+  after success; the terminal prints `logged in as @handle`.
+
+RBAC follow-up from review:
+
+- No frontend Clerk proxy/middleware exists in this checkout; public exploration pages remain public.
+- Removed the remaining unauthenticated mutation exception: the skill-library install-count bump is now
+  member-gated. `kerf skill install <slug>` still reads public skill content, writes `SKILL.md`, and
+  best-effort bumps the counter only when the CLI is logged in.
+
+Local verification:
+
+- Real Clerk session against local backend with the real Clerk secret: `/api/clerk/me` returned the
+  linked `@vaibhavtomar3003` profile.
+- `kerf login` local flow verified end-to-end: CLI opened `/cli/connect`, shadcn Dialog showed
+  "Authorize this CLI?", browser redirected to `/me?cli=connected`, and the CLI printed
+  `logged in as @vaibhavtomar3003`.
+- `kerf skill install` verified with a logged-in local config: wrote `~/.claude/skills/<slug>/SKILL.md`
+  and bumped installCount; the exact test skill directory was removed afterward.
+- `pnpm -r typecheck`, `pnpm -r test`, and `pnpm --filter @kerf/frontend build` pass. The only build
+  warning remains the existing SUSE Mono fallback-metrics warning.
 ## 2026-08-10 — design-to-code (branch `design-to-code`)
 
 Ported the `Material 3 — Platform` comps (Figma page `105:2`, 18 boards) to code. Light and dark are

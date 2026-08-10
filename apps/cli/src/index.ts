@@ -93,7 +93,8 @@ async function login() {
       process.exit(1);
     }
     await sleep(2000);
-    const polled = await fetch(`${apiUrl}/api/cli-login/${encodeURIComponent(code)}`);
+    const polled = await fetch(`${apiUrl}/api/cli-login/${encodeURIComponent(code)}`).catch(() => null);
+    if (!polled) continue;
     if (polled.status === 404) {
       console.error('login expired — run `kerf login` again');
       process.exit(1);
@@ -183,9 +184,16 @@ if (command === 'sync') {
 
   // Best-effort — one unreachable server must not fail an install that already
   // wrote the file to disk.
-  await fetch(`${apiUrl}/api/skill-library/by-slug/${encodeURIComponent(skill.slug)}/install`, { method: 'POST' }).catch((err) =>
-    console.error(`install-count bump failed: ${err.message}`),
-  );
+  const config = readConfig();
+  const token = process.env.KERF_TOKEN ?? config?.token;
+  await fetch(`${apiUrl}/api/skill-library/by-slug/${encodeURIComponent(skill.slug)}/install`, {
+    method: 'POST',
+    ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
+  })
+    .then((bump) => {
+      if (!bump.ok && bump.status !== 401) console.error(`install-count bump failed: ${bump.status} ${bump.statusText}`);
+    })
+    .catch((err) => console.error(`install-count bump failed: ${err.message}`));
 
   console.log(`installed → ${dest}`);
 } else if (command === 'login') {
