@@ -1,104 +1,130 @@
 'use client';
 
+// Rail from `Material 3 — Platform` → every screen carries the same 260px
+// sidebar (node 129:3 and its twin on the dark board). Geometry is taken from
+// the comp: 34px rows on a 34px pitch, 8px pill, 16px glyph at x=24, label at
+// x=52, footer divider 104px off the bottom.
+
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  HomeIcon,
-  RadioIcon,
-  TrophyIcon,
-  LightbulbIcon,
-  FolderGitIcon,
-  WrenchIcon,
-  UserIcon,
-} from 'lucide-react';
-import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarHeader,
-  SidebarFooter,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar';
-import { ConnectionStatus } from '@/components/connection-status';
+import {
+  HomeIcon,
+  InsightsIcon,
+  KerfLogo,
+  LiveIcon,
+  PeopleIcon,
+  ProjectsIcon,
+  SeasonIcon,
+  SkillsIcon,
+} from '@/components/kerf/icons';
+import { CliStatus } from '@/components/kerf/cli-status';
+import { ThemeToggle } from '@/components/kerf/theme-toggle';
 
-const platform = [
+type NavItem = { title: string; url: string; icon: typeof HomeIcon; match?: (p: string) => boolean };
+
+const PLATFORM: NavItem[] = [
   { title: 'Home', url: '/', icon: HomeIcon },
-  { title: 'Live', url: '/live', icon: RadioIcon },
-  { title: 'Season', url: '/season', icon: TrophyIcon },
-  { title: 'Insights', url: '/insights', icon: LightbulbIcon },
+  { title: 'Live', url: '/live', icon: LiveIcon },
+  { title: 'Season', url: '/season', icon: SeasonIcon },
+  { title: 'Insights', url: '/insights', icon: InsightsIcon },
 ];
 
-const buildInPublic = [
-  { title: 'Projects', url: '/projects', icon: FolderGitIcon },
-  { title: 'Skills', url: '/skills', icon: WrenchIcon },
-  { title: 'Me', url: '/me', icon: UserIcon },
+const BUILD_IN_PUBLIC: NavItem[] = [
+  { title: 'Projects', url: '/projects', icon: ProjectsIcon },
+  { title: 'Skills', url: '/skills', icon: SkillsIcon },
+  // The comp marks People active on the public-profile screen, so a profile
+  // route lights this row too.
+  { title: 'People', url: '/people', icon: PeopleIcon, match: (p) => p === '/people' || p.startsWith('/u/') },
 ];
+
+function NavRow({ item, active }: { item: NavItem; active: boolean }) {
+  const Icon = item.icon;
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        render={<Link href={item.url} />}
+        isActive={active}
+        tooltip={item.title}
+        className="h-[34px] gap-3 rounded-[8px] px-3 text-[14px] text-muted-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-accent-foreground"
+      >
+        <Icon size={16} />
+        <span>{item.title}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
+  const isActive = (item: NavItem) => (item.match ? item.match(pathname) : pathname === item.url);
 
   return (
-    <Sidebar collapsible="icon" className="border-sidebar-border/70" {...props}>
-      <SidebarHeader>
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border" {...props}>
+      <SidebarHeader className="p-0">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<Link href="/" />}>
-              <div className="flex aspect-square size-9 items-center justify-center rounded-2xl bg-sidebar-primary text-sidebar-primary-foreground font-mono font-bold shadow-sm">
-                K
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold tracking-tight">Kerf</span>
-                <span className="truncate text-xs text-sidebar-foreground/60">rework ratio league</span>
+            <SidebarMenuButton
+              size="lg"
+              render={<Link href="/" />}
+              className="h-auto gap-2.5 rounded-[8px] px-5 py-[22px] hover:bg-transparent"
+            >
+              <KerfLogo size={32} className="text-primary" />
+              <div className="grid flex-1 leading-tight">
+                <span className="truncate text-[18px] font-bold text-foreground">kerf</span>
+                <span className="truncate text-[11px] text-muted-foreground">season 1 · rework ratio</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Platform</SidebarGroupLabel>
-          <SidebarMenu>
-            {platform.map((item) => (
-              <SidebarMenuItem key={item.url}>
-                <SidebarMenuButton
-                  render={<Link href={item.url} />}
-                  isActive={pathname === item.url}
-                  tooltip={item.title}
-                  className="rounded-full data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold"
-                >
-                  <item.icon />
-                  <span>{item.title}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+
+      <SidebarContent className="gap-0 px-0">
+        <SidebarGroup className="gap-0 px-3 py-0">
+          <SidebarGroupLabel className="h-auto px-2 pb-[7px] text-[10px] font-semibold tracking-normal text-foreground">
+            PLATFORM
+          </SidebarGroupLabel>
+          <SidebarMenu className="gap-0">
+            {PLATFORM.map((item) => (
+              <NavRow key={item.url} item={item} active={isActive(item)} />
             ))}
           </SidebarMenu>
         </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Build in Public</SidebarGroupLabel>
-          <SidebarMenu>
-            {buildInPublic.map((item) => (
-              <SidebarMenuItem key={item.url}>
-                <SidebarMenuButton
-                  render={<Link href={item.url} />}
-                  isActive={pathname === item.url}
-                  tooltip={item.title}
-                  className="rounded-full data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold"
-                >
-                  <item.icon />
-                  <span>{item.title}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+
+        <SidebarGroup className="gap-0 px-3 pb-0 pt-[25px]">
+          <SidebarGroupLabel className="h-auto px-2 pb-[7px] text-[10px] font-semibold tracking-normal text-foreground">
+            BUILD IN PUBLIC
+          </SidebarGroupLabel>
+          <SidebarMenu className="gap-0">
+            {BUILD_IN_PUBLIC.map((item) => (
+              <NavRow key={item.url} item={item} active={isActive(item)} />
             ))}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <ConnectionStatus />
+
+      <SidebarFooter className="gap-0 px-0 pb-6 pt-0">
+        <div className="mx-3 border-t border-sidebar-border pt-5">
+          <div className="flex items-center gap-2.5 px-2">
+            <CliStatus />
+            <ThemeToggle />
+          </div>
+          <p className="px-2 pt-[11px] text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+            Cmd+B collapses to the icon rail
+          </p>
+        </div>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

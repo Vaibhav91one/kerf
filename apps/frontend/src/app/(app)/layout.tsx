@@ -1,40 +1,20 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+// Shell geometry from the comps: a 260px rail, then content inset 40px with the
+// page starting 42px down. The comps draw no top app bar — collapsing is the
+// keyboard shortcut the footer advertises, so no trigger chrome is rendered.
+
 import { AppSidebar } from '@/components/app-sidebar';
-import { Separator } from '@/components/ui/separator';
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-
-const TITLES: Record<string, string> = {
-  '/': 'Home',
-  '/live': 'Live',
-  '/season': 'Season',
-  '/insights': 'Insights',
-  '/projects': 'Projects',
-  '/skills': 'Skills',
-  '/me': 'Me',
-};
-
-function titleFor(pathname: string): string {
-  if (pathname.startsWith('/u/')) return `@${pathname.slice(3)}`;
-  return TITLES[pathname] ?? 'Kerf';
-}
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 
 export default function AppLayout({ children }: LayoutProps<'/'>) {
-  const pathname = usePathname();
-
   return (
-    <SidebarProvider>
+    <SidebarProvider style={{ '--sidebar-width': '260px' } as React.CSSProperties}>
       <AppSidebar />
-      <SidebarInset>
-        <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b bg-background/80 backdrop-blur-xl">
-          <div className="flex items-center gap-2 px-4">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 data-vertical:h-4 data-vertical:self-auto" />
-            <h1 className="text-sm font-semibold tracking-tight">{titleFor(pathname)}</h1>
-          </div>
-        </header>
-        <div className="flex flex-1 flex-col gap-5 p-4 md:p-6 xl:p-10">{children}</div>
+      <SidebarInset className="bg-background">
+        {/* Left-aligned, not centred: the comps put the content 40px after the
+            rail and cap it at 1100, which only holds if the gutter is fixed. */}
+        <div className="w-full max-w-[1180px] px-10 pb-16 pt-[42px]">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );

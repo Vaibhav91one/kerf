@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" fill="none">
+<g id="Kerf/Asset/Illustration/Live Activity">
+<path id="Broadcast core" d="M160 148C177.673 148 192 133.673 192 116C192 98.3269 177.673 84 160 84C142.327 84 128 98.3269 128 116C128 133.673 142.327 148 160 148Z" fill="#FF3B6B"/>
+<path id="Broadcast dot" d="M160 128C166.627 128 172 122.627 172 116C172 109.373 166.627 104 160 104C153.373 104 148 109.373 148 116C148 122.627 153.373 128 160 128Z" fill="white"/>
+<path id="Wave inner" d="M130 86C113 103 113 129 130 146M190 86C207 103 207 129 190 146" stroke="#FF3B6B" stroke-width="10" stroke-linecap="round"/>
+<path id="Wave outer" d="M113 69C86 96 86 137 113 164M207 69C234 96 234 137 207 164" stroke="#7C3AED" stroke-width="10" stroke-linecap="round"/>
+</g>
+</svg>

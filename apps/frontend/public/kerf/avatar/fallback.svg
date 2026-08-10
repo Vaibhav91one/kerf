@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
+<g id="Kerf/Asset/Avatar/Fallback">
+<path id="Background" d="M40 78C60.9868 78 78 60.9868 78 40C78 19.0132 60.9868 2 40 2C19.0132 2 2 19.0132 2 40C2 60.9868 19.0132 78 40 78Z" fill="#E4E8DF" stroke="#CBD0C5" stroke-width="2"/>
+<path id="Head" d="M40 44C47.732 44 54 37.732 54 30C54 22.268 47.732 16 40 16C32.268 16 26 22.268 26 30C26 37.732 32.268 44 40 44Z" fill="#657067"/>
+<path id="Shoulders" d="M14 79C16 61 26 52 40 52C54 52 64 61 66 79H14Z" fill="#657067"/>
+</g>
+</svg>

@@ -4,6 +4,7 @@ import { SUSE, SUSE_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { themeScript } from '@/components/kerf/theme-script';
 
 const suse = SUSE({
   variable: '--font-suse',
@@ -31,7 +32,10 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
   );
 
   return (
-    <html lang="en" className={`${suse.variable} ${suseMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${suse.variable} ${suseMono.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-full flex flex-col">
         {clerkKey ? <ClerkProvider publishableKey={clerkKey}>{app}</ClerkProvider> : app}
       </body>
