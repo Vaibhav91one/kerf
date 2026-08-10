@@ -25,6 +25,9 @@ function ago(ms: number): string {
 export function CliStatus() {
   const { auth, ready } = useAuth();
   const [lastBeatMs, setLastBeatMs] = useState<number | null>(null);
+  // Held in state rather than read during render: Date.now() in a render body
+  // is impure and makes the hydrated markup disagree with the server's.
+  const [nowMs, setNowMs] = useState<number | null>(null);
 
   useEffect(() => {
     if (!auth) {
@@ -42,7 +45,11 @@ export function CliStatus() {
         })
         .catch(() => {});
     void read();
-    const timer = setInterval(read, BEAT_POLL_MS);
+    setNowMs(Date.now());
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+      void read();
+    }, BEAT_POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -54,8 +61,8 @@ export function CliStatus() {
     ? ''
     : !auth
       ? 'Not connected · run kerf login'
-      : lastBeatMs
-        ? `CLI connected · beat ${ago(Date.now() - lastBeatMs)}`
+      : lastBeatMs && nowMs
+        ? `CLI connected · beat ${ago(nowMs - lastBeatMs)}`
         : 'CLI connected';
 
   return (

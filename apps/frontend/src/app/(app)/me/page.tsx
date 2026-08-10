@@ -105,11 +105,14 @@ export default function MePage() {
   const [me, setMe] = useState<MeSessions | null>(null);
   const [live, setLive] = useState<LiveSessionJson[]>([]);
   const [saving, setSaving] = useState(false);
+  // Same reason as CliStatus: no Date.now() in a render body.
+  const [nowMs, setNowMs] = useState<number | null>(null);
 
   useEffect(() => {
     if (!auth) return;
     void getToken().then((t) => (t ? api.mySessions(t).then(setMe) : null)).catch(() => {});
     api.liveSessions().then((r) => setLive(r.sessions)).catch(() => {});
+    setNowMs(Date.now());
   }, [auth, getToken]);
 
   if (!ready) return <PageSkeleton />;
@@ -225,8 +228,8 @@ export default function MePage() {
             <p className={`mt-[10px] text-[12px] ${connected ? 'text-on-success-container' : 'text-muted-foreground'}`}>
               {!connected
                 ? 'run kerf login to connect'
-                : lastBeat
-                  ? `last beat ${Math.max(0, Math.round((Date.now() - lastBeat) / 1000))}s ago · ${mineLive.length} live session${mineLive.length === 1 ? '' : 's'}`
+                : lastBeat && nowMs
+                  ? `last beat ${Math.max(0, Math.round((nowMs - lastBeat) / 1000))}s ago · ${mineLive.length} live session${mineLive.length === 1 ? '' : 's'}`
                   : 'no live session right now'}
             </p>
             <div className="mt-[14px] flex gap-[82px]">

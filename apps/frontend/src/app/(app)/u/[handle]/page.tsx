@@ -3,7 +3,6 @@
 // Screen `Light / 03 Profile` (130:181) and its dark twin (133:1370) — the
 // People destination in the rail.
 
-import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
 import { tierForValue } from '@kerf/shared';
 import {

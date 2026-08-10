@@ -96,6 +96,18 @@ Four routes gained fields so a designed element could be real rather than faked:
 returns `sessionCount`; and `improvementTips()` returns the `title` and the `trigger` rule that
 fired it, which is what the Insights comp prints beside each tip.
 
+## Lint state
+
+`pnpm --filter @kerf/frontend lint` is **red on master and stays red**: the
+`react-hooks/set-state-in-effect` rule fires on `hooks/use-mobile.ts` (shadcn's
+own file, untouched) and on the auth provider. The pattern it flags — a
+synchronous `setState` in an effect body — is benign here and rewriting six
+components' data flow to satisfy it is not worth the risk. Two errors it caught
+*were* real and are fixed: `Date.now()` read during render in `cli-status.tsx`
+and `me/page.tsx`, which is impure and makes hydrated markup disagree with the
+server's. The `<img>` warnings in `artwork.tsx` are deliberate — these are
+inline SVG assets, and `next/image` buys nothing for them.
+
 ## Known spec deviations (verified against real data, not assumed)
 
 - **No `origin.kind` field exists** in real Claude Code transcripts, despite spec §5.4 claiming
