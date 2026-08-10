@@ -537,3 +537,37 @@ own numbers — that server lives in the session scratchpad and is not part of t
 
 See CLAUDE.md "Where the comps and the API disagree" for the five places the boards ask for
 something the backend does not serve, and what was done about each.
+
+### Merged and deployed (design-to-code → master)
+
+`design-to-code` merged master in first (twelve conflicting files, two independent
+implementations of the profile screen, People, the theme toggle and CLI connect),
+resolved deliberately: master's route shape and dialog flow, this branch's
+rendering of the screens the comps define, master's theme toggle reading the
+pre-paint script rather than re-deciding. Master then fast-forwarded to it.
+
+Deployed through `zcli service push` with explicit ids, since the interactive
+service picker is unavailable in a non-tty:
+
+- `zcli service push backend  --project-id pIP9uHTARtKgxAqQWZAzIQ --service-id M23Im0RVRsOY0nR2vD0vOQ --setup backend  --workspace-state clean`
+- `zcli service push frontend --project-id pIP9uHTARtKgxAqQWZAzIQ --service-id 057LBx5uRRAqH5PapuvnzQ --setup frontend --workspace-state clean`
+
+Live verification:
+
+- `/health` 200, `/api/season/current` 200 and now carrying `histogram`.
+- Frontend routes 200: `/`, `/live`, `/season`, `/insights`, `/projects`,
+  `/skills`, `/me`, `/people`, `/people/[handle]`; `/u/[handle]` 307s to
+  `/people/[handle]`.
+- Home renders the empty-season comp (131:442) against the real, empty prod
+  season — illustration, the four stat tiles, the three-commands panel, the
+  nobody-is-live skeletons and the "why it is empty and not fake" note.
+
+Two things prod still needs, neither of which can be done from a non-interactive
+shell:
+
+- **Real data.** `kerf login` needs a browser Google sign-in; after that
+  `kerf sync` fills the league. Until then the season is honestly empty.
+- **The smoke rows** (`me`, `live-inr66gpy` and its published skill) need direct
+  Postgres access. `zcli vpn up` wants wireguard's `wg-quick` plus sudo, so this
+  is a GUI console or a local `wg` install away. Note `me` is re-seeded at boot
+  whenever `KERF_TOKEN` is set, so clearing it means clearing that secret too.
