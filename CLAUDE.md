@@ -35,11 +35,16 @@ edit it.
   (`GET /api/live/stream`), fanned out by an in-process `EventEmitter` in `src/live.ts`. RBAC is
   route-local in `src/index.ts`: public reads stay public, Clerk session routes manage browser
   account lifecycle, and member routes derive ownership from Clerk/API tokens only.
-- `apps/frontend` — Next.js dashboard. **Gate cleared 2026-08-09**: Tailwind + shadcn/ui with the
-  `sidebar-07` shell, SUSE + SUSE Mono type. Nine wireframed routes (`/`, `/live`, `/u/[handle]`,
-  `/skills`, `/projects`, `/me`, `/season`, `/insights`, plus the empty state) — see `BUILD_LOG.md`
-  for the file link. Public-first: no frontend Clerk proxy/middleware; users can explore first and
-  sign in only for `/me`, CLI connect, and mutating actions. Do not invent routes beyond them.
+- `apps/frontend` — Next.js dashboard, built from the `Material 3 — Platform` comps (Figma page
+  `105:2`): Tailwind + shadcn/ui on the `sidebar-07` shell, SUSE + SUSE Mono. The Figma variable
+  collection is mapped onto shadcn's own token names in `globals.css`, so light and dark are one
+  component set and every `ui/*` primitive inherits the palette. Icons live in
+  `components/kerf/icons.tsx` (exported path data, `currentColor`); league crests, badges, avatars
+  and illustrations are files under `public/kerf/` and are never recoloured. Routes: `/`, `/live`,
+  `/u/[handle]`, `/people`, `/skills`, `/projects`, `/me`, `/season`, `/insights`. `/people` is the
+  rail's People entry — the board draws the profile screen as its destination and no index, so the
+  directory is deliberately plain. Do not invent routes beyond these. Public-first: no frontend
+  Clerk proxy/middleware; sign-in is needed only for `/me`, CLI connect, and mutating actions.
 
 Run `pnpm install` once at the root. `pnpm -r typecheck` / `pnpm -r test` run across all packages.
 
@@ -66,6 +71,30 @@ ports in deployment regardless.
 **Never print real transcript contents back** — not in logs, not in test fixtures, not in a build log
 entry, not in a report. Transcripts are the user's own prompt history. Schema/shape inspection is
 fine; printing the actual prompt/response text is not.
+
+## Where the comps and the API disagree (decided, not left open)
+
+The `Material 3 — Platform` boards draw a few things the backend does not serve. Each was resolved
+toward what is true, and the reasoning lives next to the code:
+
+- **Follow** (profile button, "People I follow" filter). No follow graph exists. Both controls are
+  rendered as the comps draw them but inert, rather than wired to nothing.
+- **A visitor's session table** (Profile). `GET /api/profiles/:handle` deliberately serves no
+  per-session detail for someone else's account (§6). The table appears on your own profile only;
+  a visitor gets a line saying why it is absent.
+- **"Cuts unlock at 5 players"** (empty state). `tierCuts()` computes from whatever it has. The copy
+  is rendered with live counts and the threshold is a display constant — nothing enforces it.
+- **Manual token paste** (Me). That comp predates Clerk. The three steps keep its shape but describe
+  `kerf login`, which mints the token and never displays it. Token rotation says what actually
+  happens: a new token is issued, the old one is not yet revocable.
+- **Live-feed / projects visibility switches** (Me). Only `publicSkills` is a stored preference. The
+  other two rows explain the behaviour instead of showing switches that flip nothing.
+
+Four routes gained fields so a designed element could be real rather than faked:
+`season/current` now returns a 10-bucket `histogram` and a per-handle `streak` (display-only —
+§7.2 still orders on the ratio alone); `/api/skills` returns `topUsers` per tool; `/api/projects`
+returns `sessionCount`; and `improvementTips()` returns the `title` and the `trigger` rule that
+fired it, which is what the Insights comp prints beside each tip.
 
 ## Known spec deviations (verified against real data, not assumed)
 

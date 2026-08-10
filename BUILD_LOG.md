@@ -480,3 +480,31 @@ Post-deploy verification:
 Known follow-up: current Clerk keys are development/test keys, so Clerk logs a browser warning about
 development keys on production URLs. Functionality is live, but a production hardening pass should
 switch the separate Kerf Clerk app to production keys/custom production settings.
+
+## 2026-08-10 — design-to-code (branch `design-to-code`)
+
+Ported the `Material 3 — Platform` comps (Figma page `105:2`, 18 boards) to code. Light and dark are
+one component set: the Figma variable collection (Light `98:1` / Dark `98:2`) is mapped onto
+shadcn's token names, so `ui/*` primitives inherit the palette instead of carrying a second one.
+
+Screens: Home `129:2`, Empty `131:442`, Live `130:2`, Profile `130:181`, Season `131:122`,
+Insights `131:287`, Skills `130:346`, Projects `130:510`, Me `131:2`, plus a plain `/people` index
+(the board draws the profile screen as the People destination and no directory).
+
+Assets: 10 icons, 5 league crests, 5 badge medallions, 13 avatars, 5 illustrations, exported from
+their masters. Figma bakes the page canvas into a component export, so each file is reduced to its
+own `Kerf/Asset/*` subtree — otherwise every crest carries an opaque light rectangle that reads as a
+grey square in dark mode. Icons are inlined as components taking `currentColor` per the Figma note
+on each master; multi-colour artwork is served as files and never recoloured.
+
+Theme: class on `<html>`, pre-paint script in `<head>`, toggle in the sidebar footer. Neither board
+draws a switcher, so it sits where it disturbs them least.
+
+Verified in a browser against both boards at 1440: sidebar 260, nav rows 34px on a 34px pitch,
+h1 28px at y42, stat cards 260x116 at y151. `pnpm -r typecheck` clean; `pnpm -r test` 40 shared /
+33 backend / 1 cli; production frontend build clean (only the pre-existing SUSE Mono fallback
+warning). Screens were diffed against the comps with a throwaway fixture API carrying the comps'
+own numbers — that server lives in the session scratchpad and is not part of the repo.
+
+See CLAUDE.md "Where the comps and the API disagree" for the five places the boards ask for
+something the backend does not serve, and what was done about each.

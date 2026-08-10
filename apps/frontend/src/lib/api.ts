@@ -39,7 +39,7 @@ export type Standing = {
 };
 
 export type Badge = { id: string; label: string; earned: boolean };
-export type Tip = { id: string; message: string };
+export type Tip = { id: string; title: string; message: string; trigger: string };
 export type TierCuts = { p20: number; p50: number; p80: number; p95: number };
 
 export type PublicProfile = {
@@ -78,6 +78,8 @@ export type ProjectJson = {
   description: string | null;
   repoUrl: string | null;
   createdAtMs: number;
+  /** Sessions carrying this project's hash. Present on the list route only. */
+  sessionCount?: number;
 };
 
 export type LiveSessionJson = {
@@ -94,7 +96,13 @@ export type LiveSessionJson = {
 
 export type ChatMessageJson = { id: string; handle: string; body: string; createdAtMs: number };
 
-export type SkillTotal = { name: string; count: number; users: number };
+export type SkillTotal = {
+  name: string;
+  count: number;
+  users: number;
+  /** Highest-count handles for this tool, opted-in accounts only. */
+  topUsers: { handle: string; count: number }[];
+};
 
 export type MySession = SessionMetric & { tips: Tip[] };
 
@@ -105,13 +113,22 @@ export type MeSessions = {
   badges: Badge[];
 };
 
-export type SeasonStanding = { handle: string; avgReworkRatio: number; tier: Standing['tier']; sessionCount: number };
+export type SeasonStanding = {
+  handle: string;
+  avgReworkRatio: number;
+  tier: Standing['tier'];
+  sessionCount: number;
+  /** Display-only, like sessionCount — the board is ordered on the ratio alone (§7.2). */
+  streak: number;
+};
 
 export type SeasonCurrent = {
   metric: 'rework_ratio';
   higherIsBetter: false;
   sampleSize: number;
   cuts: TierCuts;
+  /** Ten fixed buckets across [0,1] — counts of qualifying sessions per band. */
+  histogram: number[];
   standings: SeasonStanding[];
   ghosts: unknown[];
 };

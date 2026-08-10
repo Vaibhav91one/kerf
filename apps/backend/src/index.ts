@@ -503,18 +503,30 @@ app.get('/api/skills', async (_req, res) => {
     ? await prisma.sessionMetric.findMany({ where: { handle: { in: handles } }, select: { handle: true, toolCounts: true } })
     : [];
 
-  const totals: Record<string, { count: number; users: Set<string> }> = {};
+  // Per-handle counts as well as the total, so the league page can answer "who
+  // uses this". Both sides are already public for these accounts: the handles
+  // opted in, and a tool name is a bounded identifier, never an argument (§6).
+  const TOP_USERS_PER_SKILL = 7;
+  const totals: Record<string, { count: number; byHandle: Map<string, number> }> = {};
   for (const r of rows) {
     for (const [tool, count] of Object.entries((r.toolCounts as Record<string, number>) ?? {})) {
-      const entry = (totals[tool] ??= { count: 0, users: new Set() });
+      const entry = (totals[tool] ??= { count: 0, byHandle: new Map() });
       entry.count += count;
-      entry.users.add(r.handle);
+      entry.byHandle.set(r.handle, (entry.byHandle.get(r.handle) ?? 0) + count);
     }
   }
 
   res.json({
     skills: Object.entries(totals)
-      .map(([name, v]) => ({ name, count: v.count, users: v.users.size }))
+      .map(([name, v]) => ({
+        name,
+        count: v.count,
+        users: v.byHandle.size,
+        topUsers: [...v.byHandle.entries()]
+          .map(([handle, count]) => ({ handle, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, TOP_USERS_PER_SKILL),
+      }))
       .sort((a, b) => b.count - a.count),
   });
 });
@@ -556,7 +568,22 @@ app.post('/api/projects', requireMember, async (req: AuthedRequest, res) => {
 
 app.get('/api/projects', async (_req, res) => {
   const rows = await prisma.project.findMany({ orderBy: { createdAt: 'desc' }, take: 100 });
-  res.json({ projects: rows.map(toProjectJson) });
+
+  // How many of the owner's own sessions carry this project's hash. An
+  // aggregate count, the same class of number as the session count already on
+  // a public profile — the hash itself is still never serialised.
+  const counts = await prisma.sessionMetric.groupBy({
+    by: ['handle', 'projectHash'],
+    _count: { _all: true },
+  });
+  const countFor = (handle: string, projectHash: string | null) =>
+    projectHash === null
+      ? 0
+      : counts.find((c) => c.handle === handle && c.projectHash === projectHash)?._count._all ?? 0;
+
+  res.json({
+    projects: rows.map((r) => ({ ...toProjectJson(r), sessionCount: countFor(r.handle, r.projectHash) })),
+  });
 });
 
 app.get('/api/projects/:id', async (req, res) => {
@@ -813,7 +840,7 @@ app.get('/api/season/current', async (_req, res) => {
 
   const rows = await prisma.sessionMetric.findMany({
     where: { qualifies: true, startedMs: { gte: monthStart, lt: monthEnd }, reworkRatio: { not: null } },
-    select: { handle: true, reworkRatio: true },
+    select: { handle: true, reworkRatio: true, startedMs: true },
   });
 
   const values = rows.map((r) => r.reworkRatio as number);
@@ -821,24 +848,45 @@ app.get('/api/season/current', async (_req, res) => {
 
   // Standings rank on a per-account average ratio — an outcome over an attempt,
   // never a total (§7.2). More sessions does not move you up the board.
-  const byHandle = new Map<string, number[]>();
+  // `streak` rides along for display only, exactly like sessionCount: the board
+  // is sorted on the ratio alone and must never be re-ordered on either.
+  const byHandle = new Map<string, { ratios: number[]; days: { startedMs: number }[] }>();
   for (const r of rows) {
-    const list = byHandle.get(r.handle) ?? [];
-    list.push(r.reworkRatio as number);
-    byHandle.set(r.handle, list);
+    const entry = byHandle.get(r.handle) ?? { ratios: [], days: [] };
+    entry.ratios.push(r.reworkRatio as number);
+    entry.days.push({ startedMs: Number(r.startedMs) });
+    byHandle.set(r.handle, entry);
   }
+  const nowMs = Date.now();
   const standings = [...byHandle.entries()]
-    .map(([handle, list]) => {
-      const avg = list.reduce((a, b) => a + b, 0) / list.length;
-      return { handle, avgReworkRatio: avg, tier: tierForValue(avg, cuts, false), sessionCount: list.length };
+    .map(([handle, { ratios, days }]) => {
+      const avg = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+      return {
+        handle,
+        avgReworkRatio: avg,
+        tier: tierForValue(avg, cuts, false),
+        sessionCount: ratios.length,
+        streak: currentStreak(days, nowMs),
+      };
     })
     .sort((a, b) => a.avgReworkRatio - b.avgReworkRatio);
+
+  // Ten fixed buckets across [0,1] for the season distribution. Counts only —
+  // an aggregate shape, not a new class of data, and the same numbers the cuts
+  // are already derived from.
+  const HISTOGRAM_BUCKETS = 10;
+  const histogram = new Array<number>(HISTOGRAM_BUCKETS).fill(0);
+  for (const v of values) {
+    const idx = Math.min(HISTOGRAM_BUCKETS - 1, Math.max(0, Math.floor(v * HISTOGRAM_BUCKETS)));
+    histogram[idx] += 1;
+  }
 
   res.json({
     metric: 'rework_ratio',
     higherIsBetter: false,
     sampleSize: values.length,
     cuts,
+    histogram,
     standings,
     ghosts: [], // ponytail: no closed historical seasons exist yet on night one
   });

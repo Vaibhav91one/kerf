@@ -35,6 +35,12 @@ test('praises a clean run with no rework', () => {
   assert.ok(tips.some((t) => t.id === 'clean-run'));
 });
 
+test('a tip states the numeric rule that fired it', () => {
+  const [tip] = improvementTips({ ...base, reworkRatio: 0.6 }, cuts);
+  assert.match(tip.trigger, /p80/);
+  assert.match(tip.title, /0\.60/);
+});
+
 test('no tips for a session with nothing notable', () => {
   const tips = improvementTips({ ...base, turns: 5, edits: 4, editsRework: 1, reworkRatio: 0.25 }, cuts);
   assert.deepEqual(tips, []);
