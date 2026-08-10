@@ -1,0 +1,14 @@
+-- One-off data fix, not a schema change.
+--
+-- Production was seeded with two accounts during deploy verification: `me`
+-- (created by seedEnvProfile from the KERF_TOKEN that used to live in
+-- zerops.yml) and `live-inr66gpy` (a live smoke test, along with the skill it
+-- published). Neither is a person. They show up in /people and the shared
+-- skill library, which directly contradicts what the empty-season screen
+-- promises: "No seeded users, no demo rows, no placeholder ratios."
+--
+-- Deleting the profile row is enough — session_metrics, projects, chat_messages,
+-- live_sessions, api_tokens, skills_library and skill_stars all cascade from
+-- profiles. Scoped to these two handles by name so it can never touch a real
+-- account, and a no-op anywhere the rows do not exist (every dev database).
+DELETE FROM "profiles" WHERE "handle" IN ('me', 'live-inr66gpy');
