@@ -26,6 +26,12 @@ zerops:
           httpSupport: true
       envVariables:
         DATABASE_URL: ${postgresql_connectionString}/${postgresql_dbName}
+        # Pulled from the project environment. Dropping this line moved the
+        # backend to a service-level secret that is not actually wired, and the
+        # running process came up without a Clerk secret at all — `clerkAuth`
+        # then answers 503 "clerk not configured" and every sign-in path dies,
+        # including claiming a handle and `kerf login`.
+        CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
         CLERK_PUBLISHABLE_KEY: pk_test_c2tpbGxlZC1qYWd1YXItNTkuY2xlcmsuYWNjb3VudHMuZGV2JA
       start: sh -c 'cd apps/backend && pnpm run prisma:deploy && pnpm start'
 
