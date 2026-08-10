@@ -322,8 +322,6 @@ screenshotted and visually verified: no clipped text, no overlap, no dead space.
 hash and number shown is placeholder or derived from real API response *shapes* — no transcript
 content appears anywhere in either Figma file.
 
-### Next
-
 ### Shared Skills Library + profile links
 
 User asked for people to share the Claude Code Skills they use day to day: browse them, copy them,
@@ -362,8 +360,51 @@ Verification after the reload-state fix:
 - Authenticated list smoke: after starring a skill, `GET /api/skill-library` returns
   `isStarredByMe: true`, fixing the reload-state bug found during review.
 
+### Production deploy verified
+
+Committed and pushed to GitHub:
+
+- `56bb4b2 feat: add shared skills library`
+- Repository: https://github.com/Vaibhav91one/kerf
+
+Deployed through `zcli service push`:
+
+- Backend: `zcli service push backend --setup backend --workspace-state clean`
+- Frontend: `zcli service push frontend --setup frontend --workspace-state clean`
+
+Live verification:
+
+- Backend health: `https://backend-2cf9-3000.prg1.zerops.app/health` → 200.
+- Backend Shared Skills API: `GET /api/skill-library` → 200, returns `{ skills: [...] }`.
+- Live end-to-end Path B smoke: created a live profile, published a skill, starred it, verified
+  authenticated list returns `isStarredByMe`, bumped install count through the by-slug install route,
+  and fetched the public profile.
+- Frontend routes verified 200: `/`, `/skills`, `/me`, `/season`, `/live`, `/projects`,
+  `/insights`, `/u/live-inr66gpy`.
+- Frontend `/skills` deployed build contains the Shared Library UI markers.
+
+Live URLs:
+
+- Frontend: https://frontend-2cf9-3000.prg1.zerops.app
+- Backend: https://backend-2cf9-3000.prg1.zerops.app
+
+### Known auth-flow gap
+
+The current CLI auth flow is still manual: `/me` creates/shows a token once, then the user exports
+`KERF_API_URL` and `KERF_TOKEN` before running `kerf sync` / `kerf live`. The better product flow the
+user described is not implemented yet:
+
+```text
+kerf login
+  → browser opens dashboard connect flow
+  → user claims/selects profile
+  → CLI receives/stores token locally
+  → kerf sync/live use stored auth automatically
+```
+
+Implementing that needs a device-code or local-callback login handshake plus local config storage
+(`~/.kerf/config.json`) and `kerf logout`.
+
 ### Next
 
-- Commit and push the shared-skills implementation.
-- Deploy backend then frontend to Zerops.
-- Verify live backend/frontend URLs and live shared-skills flow.
+- Build `kerf login` / `kerf logout` and remove the manual token setup from the primary UX.
