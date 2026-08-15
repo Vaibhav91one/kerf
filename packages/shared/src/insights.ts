@@ -1,10 +1,13 @@
 // Numbers-only session insights for the dashboard — kerf-spec.md §6 privacy
 // invariant applies here too: tips are template strings picked by comparing
-// numbers already in SessionMetric/TierCuts, never by reading prompt/tool
-// arguments. No I/O. Amendment F.
+// numbers already in SessionMetric, never by reading prompt/tool arguments.
+// No I/O. Amendment F.
+//
+// Thresholds are fixed, not percentile-relative — season.ts's TierCuts went
+// away with the points/level rework, and a fixed cut is exactly as readable
+// for a single-session tip.
 
 import type { SessionMetric } from './schema.ts';
-import type { TierCuts } from './season.ts';
 
 // A tip carries the rule that fired it. The Insights comp prints that rule next
 // to the advice on purpose: every tip here is a threshold comparison on numbers
@@ -12,15 +15,17 @@ import type { TierCuts } from './season.ts';
 // that read your transcripts.
 export type Tip = { id: string; title: string; message: string; trigger: string };
 
-export function improvementTips(metric: SessionMetric, cuts: TierCuts): Tip[] {
+const HIGH_REWORK_THRESHOLD = 0.4;
+
+export function improvementTips(metric: SessionMetric): Tip[] {
   const tips: Tip[] = [];
 
-  if (metric.reworkRatio !== null && metric.reworkRatio > cuts.p80) {
+  if (metric.reworkRatio !== null && metric.reworkRatio > HIGH_REWORK_THRESHOLD) {
     tips.push({
       id: 'high-rework',
       title: `Rework ratio ${metric.reworkRatio.toFixed(2)} in this session`,
-      trigger: `triggered at ratio > p80 (${cuts.p80.toFixed(2)})`,
-      message: 'Rework ratio is above your season p80 — try smaller, more targeted edits before re-touching a file.',
+      trigger: `triggered at ratio > ${HIGH_REWORK_THRESHOLD.toFixed(2)}`,
+      message: 'A lot of files got touched more than once — try smaller, more targeted edits before re-touching a file.',
     });
   }
 

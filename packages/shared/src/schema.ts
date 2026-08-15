@@ -1,6 +1,12 @@
 // Unified event schema — kerf-spec.md §5.3. Every string field here is a
 // compiled enum, a sha256 hash, or a timestamp; never free text (§6).
 
+// Which agent produced the transcript. An enum, so it stays §6-safe on Path A
+// — widened from a single literal so apps/cli/src/extract-codex.ts can tag
+// its output the same way apps/cli/src/extract.ts does.
+export const AGENT_SOURCES = ['claude-code', 'codex'] as const;
+export type AgentSource = (typeof AGENT_SOURCES)[number];
+
 export type EventKind =
   | 'human_turn'
   | 'assistant'
@@ -13,7 +19,7 @@ export type EventKind =
   | 'session_end';
 
 export type KerfEvent = {
-  source: 'claude-code';
+  source: AgentSource;
   sessionId: string;
   projectHash: string; // sha256(cwd), never the path — §6
   ts: number; // epoch ms
@@ -28,7 +34,7 @@ export type KerfEvent = {
 // Output of metrics.ts — one row per session (kerf-spec.md §9 session_metric,
 // trimmed to what an August-season (rework ratio) build needs).
 export type SessionMetric = {
-  source: 'claude-code';
+  source: AgentSource;
   sessionId: string;
   projectHash: string;
   startedMs: number;

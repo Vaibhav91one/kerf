@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LIMITS, cleanHandle, cleanMultilineText, cleanRepoUrl, cleanText } from './social.ts';
+import {
+  LIMITS, cleanHandle, cleanMultilineText, cleanRepoUrl, cleanText, githubRepo, formatSkillLabel,
+  classifyTool, searchNeedle,
+} from './social.ts';
 
 test('cleanText trims and collapses whitespace', () => {
   assert.equal(cleanText('  hello   world  ', 100), 'hello world');
@@ -80,4 +83,95 @@ test('cleanMultilineText rejects over-length, empty, and non-string input', () =
   assert.equal(cleanMultilineText('x'.repeat(LIMITS.skillContent + 1), LIMITS.skillContent), null);
   assert.equal(cleanMultilineText('   \n  ', 100), null);
   assert.equal(cleanMultilineText(42, 100), null);
+});
+
+// --- githubRepo: the SSRF guard ---------------------------------------------
+
+test('githubRepo accepts a real github repo url', () => {
+  assert.deepEqual(githubRepo('https://github.com/Vaibhav91one/kerf'), { owner: 'Vaibhav91one', repo: 'kerf' });
+  assert.deepEqual(githubRepo('https://github.com/Vaibhav91one/kerf.git'), { owner: 'Vaibhav91one', repo: 'kerf' });
+  assert.deepEqual(githubRepo('https://github.com/a/b/tree/main'), { owner: 'a', repo: 'b' });
+});
+
+test('githubRepo rejects hosts that only look like github', () => {
+  // Both of these pass an endsWith test, which is why the check is an exact compare.
+  assert.equal(githubRepo('https://evilgithub.com/a/b'), null);
+  assert.equal(githubRepo('https://github.com.attacker.tld/a/b'), null);
+});
+
+test('githubRepo rejects anything that is not https github.com', () => {
+  assert.equal(githubRepo('http://github.com/a/b'), null);
+  assert.equal(githubRepo('https://gitlab.com/a/b'), null);
+  assert.equal(githubRepo('http://169.254.169.254/latest/meta-data/'), null);
+  assert.equal(githubRepo('https://user:pass@github.com/a/b'), null);
+  assert.equal(githubRepo('https://github.com/onlyowner'), null);
+  assert.equal(githubRepo('not a url'), null);
+  assert.equal(githubRepo(null), null);
+});
+
+// --- formatSkillLabel -------------------------------------------------------
+
+test('formatSkillLabel strips packaging noise but keeps a typeable slug', () => {
+  const cases: [string, string][] = [
+    ['plugin_figma_figma', 'figma'],
+    ['figma:figma-use', 'figma-use'],
+    ['figma:figma-generate-diagram', 'figma-generate-diagram'],
+    ['codex:setup', 'setup'],
+    ['claude-in-chrome', 'claude-in-chrome'],
+    ['chrome-devtools', 'chrome-devtools'],
+    ['grill-me', 'grill-me'],
+    ['batch', 'batch'],
+  ];
+  for (const [input, want] of cases) assert.equal(formatSkillLabel(input), want, input);
+});
+
+test('formatSkillLabel never returns an empty string', () => {
+  assert.equal(formatSkillLabel(''), '');
+  assert.equal(formatSkillLabel('plugin_'), 'plugin_');
+  assert.equal(formatSkillLabel('x:'), 'x:');
+});
+
+// --- classifyTool -----------------------------------------------------------
+
+test('classifyTool splits a skill key off its prefix', () => {
+  assert.deepEqual(classifyTool('skill:caveman'), { kind: 'skill', label: 'caveman' });
+});
+
+test('classifyTool folds every tool of one MCP server onto the server name', () => {
+  assert.deepEqual(classifyTool('mcp__serena__find_symbol'), { kind: 'mcp', label: 'serena' });
+  assert.deepEqual(classifyTool('mcp__serena__replace_symbol_body'), { kind: 'mcp', label: 'serena' });
+});
+
+test('classifyTool splits on the FIRST __, so a server name may contain _', () => {
+  // A greedy group swallows `plugin_figma_figma__whoami` up to the LAST `__`
+  // and reports the label as `plugin_figma_figma__whoami`'s prefix instead.
+  assert.deepEqual(classifyTool('mcp__plugin_figma_figma__whoami'), { kind: 'mcp', label: 'plugin_figma_figma' });
+});
+
+test('classifyTool calls a built-in tool a built-in', () => {
+  assert.deepEqual(classifyTool('Bash'), { kind: 'builtin', label: 'Bash' });
+  assert.deepEqual(classifyTool('Edit'), { kind: 'builtin', label: 'Edit' });
+});
+
+test('classifyTool does not treat a bare mcp-ish name as MCP', () => {
+  assert.deepEqual(classifyTool('mcp__nodelimiter'), { kind: 'builtin', label: 'mcp__nodelimiter' });
+});
+
+// --- searchNeedle -----------------------------------------------------------
+
+test('searchNeedle trims, lowercases and drops one leading @', () => {
+  assert.equal(searchNeedle('  Ada '), 'ada');
+  assert.equal(searchNeedle('@Ada'), 'ada');
+});
+
+test('searchNeedle drops only ONE @ — the second is part of what was typed', () => {
+  assert.equal(searchNeedle('@@x'), '@x');
+});
+
+test('searchNeedle keeps an interior @ alone', () => {
+  assert.equal(searchNeedle('a@b'), 'a@b');
+});
+
+test('searchNeedle of an empty box is empty', () => {
+  assert.equal(searchNeedle('   '), '');
 });
