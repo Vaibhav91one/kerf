@@ -25,6 +25,12 @@ zerops:
         - port: 3000
           httpSupport: true
       envVariables:
+        # Express's finalhandler picks its behaviour off NODE_ENV, and it
+        # defaults to 'development' when unset — which returns err.stack to the
+        # CLIENT on any unhandled error: absolute paths, module layout, and the
+        # DB host and user out of a Prisma connection error. This one line is
+        # what makes a 500 say "Internal Server Error" instead.
+        NODE_ENV: production
         DATABASE_URL: ${postgresql_connectionString}/${postgresql_dbName}
         # Pulled from the project environment. Dropping this line moved the
         # backend to a service-level secret that is not actually wired, and the
@@ -32,8 +38,33 @@ zerops:
         # then answers 503 "clerk not configured" and every sign-in path dies,
         # including claiming a handle and `kerf login`.
         CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
-        CLERK_PUBLISHABLE_KEY: pk_test_c2tpbGxlZC1qYWd1YXItNTkuY2xlcmsuYWNjb3VudHMuZGV2JA
+        # Pulled from project env like the secret above — no longer hardcoded.
+        # Was a literal pk_test_… (a Clerk DEVELOPMENT instance key, capped at
+        # ~100 users with no production origin allow-list); set both this and
+        # CLERK_SECRET_KEY to a Clerk PRODUCTION instance's keys in the Zerops
+        # project env before this serves real users.
+        CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
+        # Comma-separated origins Clerk will accept a session token as issued
+        # for — see auth.ts's clerkAuthorizedParties(). Without this, a Clerk
+        # session JWT valid for this instance is accepted here regardless of
+        # which site presented it, and the wildcard CORS origin below makes
+        # that a reachable path rather than a theoretical one. e.g.
+        # https://kerf.example.com
+        CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES}
+        # Optional. Without it the GitHub proxy uses the anonymous 60 req/hr/IP
+        # budget, which the 10-minute cache makes workable; with it, 5000/hr.
+        # Runtime only — putting a secret in build.envVariables bakes it into
+        # the build log.
+        GITHUB_TOKEN: ${GITHUB_TOKEN}
       start: sh -c 'cd apps/backend && pnpm run prisma:deploy && pnpm start'
+      # /health does a SELECT 1, so this withholds traffic from a container
+      # whose `prisma migrate deploy` is still running or whose database is
+      # unreachable. Without it the platform routes on process liveness alone,
+      # and this process binds :3000 happily with no database at all.
+      healthCheck:
+        httpGet:
+          port: 3000
+          path: /health
 
   - setup: frontend
     build:
@@ -48,12 +79,19 @@ zerops:
       envVariables:
         COREPACK_NPM_REGISTRY: https://registry.npmmirror.com
         NEXT_PUBLIC_API_URL: https://backend-2cf9-3000.prg1.zerops.app
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_c2tpbGxlZC1qYWd1YXItNTkuY2xlcmsuYWNjb3VudHMuZGV2JA
+        # Used by robots.ts/sitemap.ts to build absolute URLs. Update this
+        # alongside C1's real production domain when that lands.
+        NEXT_PUBLIC_SITE_URL: https://frontend-2cf9-3000.prg1.zerops.app
+        # Same production key as the backend's CLERK_PUBLISHABLE_KEY, from
+        # project env — was a hardcoded Clerk DEVELOPMENT-instance key.
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
     run:
       base: nodejs@22
       ports:
         - port: 3000
           httpSupport: true
       envVariables:
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_c2tpbGxlZC1qYWd1YXItNTkuY2xlcmsuYWNjb3VudHMuZGV2JA
+        # Same production key as the backend's CLERK_PUBLISHABLE_KEY, from
+        # project env — was a hardcoded Clerk DEVELOPMENT-instance key.
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
       start: sh -c 'cd apps/frontend && pnpm start'

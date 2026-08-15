@@ -603,3 +603,486 @@ the backend run environment entirely, which took the same routes to 503
 "clerk not configured". The project-environment reference is restored in
 79f7f06; if service-scoped secrets are still the goal, wire the secret onto the
 backend service first and drop the line again afterwards.
+
+## 2026-08-11 — points, levels, and the readability rework
+
+The season ranked on rework ratio: a decimal printed on nine surfaces, with tiers cut at live
+percentiles. A visitor read `0.369` and `p20 cut is 0.31` and learned nothing from either. The
+user's verdict was blunt — "those are not readable things… people will not understand the ratios" —
+so the score changed and every surface that carried a ratio was rebuilt.
+
+### The scoring model (`packages/shared/src/points.ts`, new)
+
+Pure, no I/O, derived on read from columns already in `session_metrics`. No metrics migration, no
+CLI payload change, and `validate.ts`'s Path-A allow-list is untouched — points never travel the
+wire, they are computed server-side from what is already stored.
+
+- `sessionPoints()` — **landed** (`10·log2(1 + edits − rework)`, sublinear so a 200-edit session
+  cannot bury a careful 20-edit one), **precision** (`30·(1 − reworkRatio)`, the dominant term —
+  the old metric kept as the engine and hidden from the UI), **focus** (`20·min(1, landed/turns/3)`,
+  so one enormous Write hits a ceiling instead of running away).
+- `totalPoints()` sums per UTC day clamped to `DAILY_POINT_CAP`; `monthPoints()` restricts to the
+  current UTC month. `rankFor()` maps a total onto five fixed `LEVELS`.
+- `season.ts` lost `tierCuts`, `TierCuts`, `tierForValue`, `seasonScore` and `percentile`; only
+  `type Tier` survives. Deleting them is what forced every ratio out of the UI — nothing can print
+  a cut that no longer exists. `game.ts` lost `tierProgress()` and its `cuts` argument; badge ids
+  are unchanged, so `public/kerf/badge/*.svg` still maps.
+
+This **deviates from spec §7.2, which forbids ranking on a total**, and `game.ts`'s banner used to
+say exactly that. It ships with the §7.5 degenerate-play counters that make it defensible: a
+non-qualifying session scores 0, each UTC day is capped, and the award is sublinear in volume and
+dominated by precision. Both banners now carry the deviation rather than contradicting it silently.
+
+Sanity gate on the real corpus before any UI was built on it: 25 sessions, 9 qualifying, 532
+lifetime points → Silver, 2% toward Gold. Plausible, so `LEVELS` was left alone — it is a tuning
+knob marked `ponytail:`, one edit from a re-fit once there is real data.
+
+### Backend
+
+`/api/season/current` now returns `{ metric: 'points', levels, standings }` ordered on points earned
+this month, with each player's lifetime level as their crest; the histogram, the cuts, the ghosts row
+and `higherIsBetter` are gone. `/api/profiles/:handle` serves a points standing. `/api/me/sessions`
+gained per-session `points`, plus `totalPoints`, `monthPoints`, `rank`, and `hasCliToken` — the last
+is what lets `/me` hide the connect steps once a token exists.
+
+New: `projects.logo_url` (migration `20260811023233_add_project_logo`), validated with the existing
+`cleanRepoUrl()` http(s)-only allow-list rather than a second URL check. `DELETE /api/projects/:id`
+and `DELETE /api/skill-library/:id` scope by handle **in the WHERE clause**, so a delete that matches
+nothing is a 404 — verified in `scripts/e2e.mjs`: another account's delete returns 404 and the row
+survives; the owner's returns 200 and it is gone.
+
+### Frontend
+
+Five hand-rolled date helpers collapsed into `lib/time.ts` (two of them were printing raw ISO
+stamps). Two near-identical live tiles became `live-card.tsx`, two identical session tables became
+`session-table.tsx`, and `/me` and `/people/[handle]` — which shared nothing — became one
+`profile-view.tsx`. The home page's four stat cards and the whole tier-ladder panel became one
+`rank-progress.tsx`: crest, points, bar, next crest.
+
+New: a 56px sticky `top-bar.tsx` (breadcrumb, streak chip, account menu) mounted in the `(app)`
+layout; badges moved into the profile hero; project cards show a logo or the new
+`project-fallback.svg`, with a GitHub mark in place of a printed URL; the projects form moved into a
+dialog; `/season` prints level thresholds instead of percentiles; Insights uses the shared table and
+says plainly that AI-powered tips are not built yet.
+
+Five new illustrations in the existing flat 320×240 idiom: four activity variants keyed off a live
+session's counters (building / debugging / reading / exploring) and the project fallback.
+
+### CLI
+
+`kerf skills` and `kerf projects` list what is on this machine and make **no network call** —
+verified with the backend stopped. `kerf skills publish <slug>` and `kerf projects publish
+[--name] [--repo]` are the only new commands that transmit, and only what you named. Project publish
+sends `sha256(cwd)`, which is what links your uploaded sessions to the project — something the web
+form cannot supply. Project listing recovers each `cwd` from the transcript's own first record, not
+from the directory name, whose path encoding is lossy (§5.1).
+
+### Onboarding
+
+`/cli/connect` moved inside the `(app)` group: the dashboard renders behind it, blurred, and the flow
+is a three-step dialog — Google, your profile (avatar prefilled from Google, editable), then a
+plain-language panel saying what leaves the machine and what never does, read *before* the token is
+minted. The CLI handshake is byte-for-byte unchanged: same URL, same `?code`, same polling, same
+one-shot claim. Only the presentation moved.
+
+### Verification
+
+`pnpm -r typecheck` clean across all four packages. Tests: 44 shared / 34 backend / 1 cli.
+Production `next build` passes with every route intact. `scripts/e2e.mjs` passes against a real
+Postgres (use a throwaway `kerf_e2e` database — it expects an empty one). Browser walk of `/` and
+`/people/[handle]` in both themes shows no decimal ratio, percentile or `pXX` label anywhere; the
+purge grep over `apps/frontend/src` returns only comments and the `/me` privacy field list.
+
+Still open: the Figma files (wireframes, Material 3 comps, FigJam) still describe the ratio model
+and have not been updated.
+
+## 2026-08-11 (later) — readability pass, real skill names, and a privacy page
+
+Reviewing the points rework in a browser produced a list of concrete problems. All of them are code
+now; the Figma files are still to follow.
+
+### Real skill names on /skills
+
+`/skills` was listing `Bash 1040`, `Read 341`, `Edit 250` — facts about Claude Code, not about
+anyone's craft. The interesting unit is the skill.
+
+Checked against the real corpus: assistant records carry a top-level `attributionSkill` — 1039
+records, 16 distinct slugs, every one already matching the backend's `TOOL_NAME` regex. It also
+catches skills entered by slash command, which never produce a `Skill` tool_use at all (there were
+only 18 of those). `extract.ts` now emits one `skill:<slug>` key per attributed record **that
+produced a tool call** — per record, not per block, because a "use" is a turn the skill drove.
+`metrics.ts` and `schema.ts` needed no change; `toolCounts` already folds `e.tool`.
+
+**Only the slug is read.** A `Skill` block's `input.args` and a transcript's `<command-args>` are
+free text and are never touched. The extractor guards the slug with a local copy of `TOOL_NAME` so
+one malformed value can't fail the whole session closed at the validator.
+
+`MAX_TOOL_COUNT_KEYS` went 60 → 240. A real session already carries ~52 distinct tool names, and
+this validator fails closed on the entire metric — a cap that tight silently loses sessions, which
+is the opposite of what it is for. The privacy bound was never the count; it is `TOOL_NAME` plus
+fail-closed on unknown keys. `kerf sync` now prints rejection *reasons*, not just a count.
+
+`GET /api/skills` classifies each key into `skill` / `mcp` / `builtin` (`classifyTool`), folding an
+MCP server's tools into one row. Server-side, because the client only receives the top-7 users per
+row — folding after that slice would report a wrong `users` count. All three kinds are still
+returned; the page filters `builtin`, so restoring tools is one line.
+
+Verified end to end: 25 sessions re-synced, 0 rejected, max 40 distinct keys in one session, and
+`/skills` now reads `grill-me 176`, `figma:figma-use 153`, `claude-in-chrome (MCP) 773`.
+
+### Type scale, +15%
+
+Body text was 13px in 190 hardcoded `text-[Npx]` literals. One-shot codemod against an agreed table
+(13→15, 11→13, 28→32, …), verified by multiset rather than by re-running — the mapping is not
+idempotent. The vendored `components/ui/*` primitives size with Tailwind tokens instead, so
+`--text-xs…--text-xl` were overridden by the same 15% in `globals.css`; that single block also
+covers `shared-library.tsx` and the connect dialog, and keeps the two scales from drifting.
+
+Seven fixed-height panels became `min-h-` (they clip at the new size), two fixed-width buttons became
+`min-w- + px-`, and four skeleton placeholders were re-tuned so the page stops jumping on load.
+
+### Chrome
+
+The collapsed sidebar was broken: `SidebarHeader className="p-0"` removed the 8px gutter that makes
+`8 + 32 + 8 = 48px` centre a mark in the icon rail, and the raw `<KerfLogo>` was being shrunk to
+16px by the primitive's `[&_svg]:size-4`, leaving a clipped sliver of the title text. Header padding
+is scoped to the expanded state, the mark has its own box, the title hides in icon mode, and the
+footer no longer overflows 48px.
+
+The top bar gained the `SidebarTrigger` (previously exported but unused — Cmd+B and the invisible
+rail were the only ways to collapse), the theme toggle (moved out of the sidebar footer), a real
+Sign in **button** via Clerk's modal, and a slot for per-page actions.
+
+Per-page actions use `createPortal` into that slot (`top-bar-actions.tsx`) with
+`useSyncExternalStore` — chosen over a context provider because registering JSX re-registers every
+render, and over the top bar owning the dialogs because it would then need both pages' data. The
+`useSyncExternalStore` shape also avoids adding a third `set-state-in-effect` lint site. "New
+project" and "Publish a skill" now live in the bar and are **never disabled**: signed out they open
+sign-in, which is what someone clicking them actually wants.
+
+`/me` renders conditionally rather than with a `hidden` class, lost the ROTATE TOKEN panel, and its
+command blocks became a shared `CommandBlock` with per-line copy buttons (the one existing
+`CopyButton` was lifted out of `shared-library.tsx` into the kerf UI kit, gaining an unmount timer
+clear and a rejection catch on the way).
+
+Project cards are two-column now — text left, art filling a full-height panel on the right — instead
+of a 240px box with four absolutely-positioned children. The fallback illustration's viewBox was
+cropped to its own artwork so it fills that panel instead of floating in padding.
+
+`/people` gained a search box. The handle is the unique tag, so one field does both jobs: type a name
+to filter, type an exact `@handle` and press Enter to go there. Client-side over the existing list —
+the route is unpaginated at 200 rows and there are single digits of profiles.
+
+### Prose out, /privacy in
+
+Roughly twenty explanatory sentences were scattered across the screens, five of them restating the
+same privacy point in near-identical words. All removed; `/privacy` is their single home, assembled
+from the same sentences with no new claims. One exception stays inline: the caption under the
+`publicSkills` switch on `/me` — a consent control has to state its consequence at the point of the
+click.
+
+### Verification
+
+`pnpm -r typecheck` clean ×4. Tests 44 shared / 37 backend / 1 cli. Production build passes with
+`/privacy` present. `scripts/e2e.mjs` passes against real Postgres including the new MCP folding and
+the owner-scoped unpublish guard. Browser-checked at 1440 in both themes: skills list, projects
+cards, collapsed sidebar, `/me` copy buttons, `/privacy`, and the top-bar theme toggle.
+
+### Follow-ups the same day — chrome removed, then verified through the UI
+
+The top bar was tried and cut. The rail is the only chrome now: the collapse arrow sits beside the
+logo (and is the sole survivor when collapsed), page actions moved onto each `PageHeader` row via an
+`action` prop, and the theme toggle moved to `/me`. `top-bar.tsx` and the `TopBarActions` portal were
+deleted with it — the portal existed only to feed a bar that no longer exists. `PageHeader` also lost
+its hairline rule. Project cards went to two-per-row with the art panel's tint removed, and the
+fallback illustration's viewBox was cropped so it fills that panel.
+
+Four real defects the dev log and a UI pass turned up, all fixed rather than silenced:
+
+- **`<li>` inside `<li>`** — the old top bar nested `BreadcrumbSeparator` (an `<li>`) inside
+  `BreadcrumbItem`. Gone with the bar.
+- **Base UI `nativeButton` warnings** — `<Button render={<Link/>}>` swaps the native `<button>` for
+  an anchor; those call sites now pass `nativeButton={false}`.
+- **SUSE Mono font warning on every compile** — next/font has no metric overrides for that family,
+  so it could never synthesise a fallback. Fixed by declaring the mono stack and
+  `adjustFontFallback: false`, not by hiding the warning.
+- **`<script>` rendered by a component** — the pre-paint theme script is now `next/script` with
+  `strategy="beforeInteractive"`.
+
+And three found by actually clicking through it:
+
+- **"New project" did nothing.** `DialogTrigger render={<NewProjectButton/>}` passes the trigger's
+  onClick/aria through props, and the component was swallowing them. It forwards props now.
+- **`hasCliToken` was false for a connected account** — it counted only `api_tokens`, so an account
+  connected by the legacy dashboard token was shown "connect in three steps" beside a CLI STATUS
+  card reading Connected. It now counts either.
+- **A public profile listed every raw tool key** — a wall of Bash/Read/Edit/Write. It uses the same
+  `classifyTool` taxonomy as `/skills`: skills and MCP servers, folded per server.
+
+Verified in the browser signed in: create a project through the dialog (persisted), publish a skill
+through the sheet (persisted), star a skill (0→1), unpublish (persisted, list shrank), people search
+by name and Enter-on-@handle navigation, both themes, collapsed and expanded rail. Console clean on
+every route, dev log clean, `next build` reports zero warnings and zero errors, and `scripts/e2e.mjs`
+passes on a fresh database.
+
+## 2026-08-11 (later still) — Home stops being the board
+
+Home and `/season` had become the same page: `/season` fetched exactly one endpoint, Home already
+fetched it, their standings tables were ~90% identical markup, and Home's `<h1>` read `Season {n}`.
+
+**The split, which should hold.** `/season` owns the board — levels, how points are earned,
+standings, and now the full badge ladder. Home owns you and the room — CLI/sign-in state, your rank,
+your badges, the single next badge to chase, skill of the day, trending this week, live now. Home's
+standings table, its "You are #N" line (moved to `/season`) and MOST STARRED SKILLS (trending
+replaces it) are gone. `seasonNumber()` moved to `lib/time.ts` now that `/season` is its only caller.
+
+### Badges learned to count
+
+`game.ts` was computing `elite` and `streak`, comparing them, and throwing the numbers away — so
+nothing could say "2 of 5". `Badge` now carries `progress: {have, need}` and a `requirement` line.
+Two of the six are not natural counters and say so: `clean-run` reports the *best partial attempt*
+(your cleanest session's edit count, 0 for any session that re-touched a file) and `steady-hand` the
+*current leading run* — both monotone and predictive, where a "4 of your last 5" sticks at 4 forever
+while the bad session sits in the middle. Both preserve their original boolean exactly, and a test
+sweeps `earned === (have >= need)` over a mixed corpus.
+
+Root cause fixed while in there: `badges()` trusted caller ordering for `slice(0, 5)`, and the
+leading-run semantics made that load-bearing. It sorts its own copy now — one line at the point every
+caller routes through, plus a test that locks it.
+
+`nextBadge()` picks the unearned badge closest to done; strict `>` keeps declaration order on a tie,
+so it is stable across renders. Home shows that one; `/season` shows all six.
+
+### Trending and skill of the day
+
+`GET /api/skills?window=7d` — one `where` clause landing on the existing `@@index([handle, startedMs])`,
+no migration, and it *shrinks* the JS fold so it is cheaper than the unwindowed call. Skill of the day
+is `floor(Date.now() / 86_400_000) % pool.length` over the top 20: the UTC day number is already
+uniform, so it is its own hash — no crypto, no stored pick, no cron, and every instance answers the
+same thing.
+
+That only works if the list is totally ordered, and it was not: equal counts fell back to Postgres
+row order, so the list could reshuffle on a restart. Now `b.count - a.count || a.name.localeCompare(a.name)`.
+
+### GitHub, without becoming an SSRF gadget
+
+New `/projects/[id]` page and a `GET /api/projects/:id/github` proxy. `cleanRepoUrl` allows any
+http(s) host — correctly, since it guards what we render as a *link* — so feeding a stored `repoUrl`
+to a server-side fetch would let an owner point us at `169.254.169.254` and read the response back.
+`githubRepo()` is the guard: https only, `hostname === 'github.com'` compared **exactly** (both
+`evilgithub.com` and `github.com.attacker.tld` pass an `endsWith` test), and the outbound URL is
+rebuilt from `owner`/`repo` rather than the stored string. Verified end to end: four hostile URLs each
+404 at the parser, the real one returns 200.
+
+The response is a whitelist, not a passthrough — GitHub's repo object is ~100 keys — and its strings
+run through the Path-B sanitisers because they are free text from outside our trust boundary. **It is
+never written to a `Project` column**; that would be a Path-B write from a non-human source. Failures
+are cached alongside successes, or an uncached 404 burns the anonymous 60/hr budget on every view.
+
+### Empty states, carousel, and /me
+
+One `EmptyState` (centred illustration, then the line) adopted at 6 of ~19 sites. The other 13 keep
+their plain `<p>` for reasons kept in comments: two are `<td colSpan>` inside a `table-fixed` body,
+one is an inline `<span>` in a chip row, several sit in `overflow-y-auto` rails where the art would be
+the first thing to scroll away, one re-renders per keystroke, and `profile-view`'s "Nothing shared" is
+a *privacy* state rather than an absence — an illustration there would make the wrong claim, so its
+copy changed instead. The three illustrations this used (`publish-project`, `insights`,
+`live-activity`) had been sitting on disk, in the union, referenced nowhere.
+
+`BadgeCarousel` is native CSS scroll-snap plus two arrows, ~60 lines, no dependency — this project is
+on `@base-ui`, so `shadcn add carousel` would have dragged in embla and a second primitive stack to
+slide six chips. The `<ul>` is one tab stop the browser already scrolls with arrows/Home/End, and
+overflowed chips stay in the DOM so a screen reader reaches all of them.
+
+Your own profile no longer shows the dead Follow button — that slot is the carousel. Visitors still
+see Follow, inert, as the comps draw it. The tool-use rail lost `sticky`. `/me` is reordered (profile
+→ rank → CLI status → published lists → four `ActionCard`s → connect steps) and the visibility rows
+became cards: one real `Switch` for skills, and actions for the three that were never preferences.
+
+### Verification
+
+typecheck ×4 clean; 59 shared / 37 backend / 1 cli; `next build` 0 warnings 0 errors with
+`/projects/[id]` listed; `scripts/e2e.mjs` green on a fresh database. In the browser: Home shows rank,
+badges, "2 of 3" next badge, skill of the day, trending and live with no standings table; `/season`
+shows standing, the six-badge ladder with progress, levels and standings; `/projects/[id]` renders
+live GitHub data ("pushed 21h ago", TypeScript).
+
+### Review pass findings
+
+Three things the review caught that testing had not:
+
+- **The badge rail would have overlapped the name.** `profile-view`'s hero put the right slot at
+  `absolute right-[22px] top-[32px]` — safe for the 128px Follow button it used to hold, not for a
+  420px carousel. The hero is a flex row now, identity `min-w-0 flex-1`, rail `shrink-0`.
+- **`empty-season.tsx` became unreachable** when Home stopped short-circuiting on
+  `sampleSize === 0`. Deleted. Its only dependant, `StatCard`, is kept — it is a comp shape
+  `PageSkeleton` still mirrors — but now says in a comment that it has no caller, rather than
+  looking live.
+- **`nextBadge` verified against the real corpus**, not just fixtures: it picks `clean-run` (2/3)
+  over `streak-7` (3/7), the `earned === have >= need` invariant holds on every badge, no `have`
+  exceeds its `need`, and shuffling the input changes nothing.
+
+Console is clean across all ten routes. The two "preloaded but not used" warnings are Next's own
+single preload link, identical on every page and unrelated to these changes.
+
+### Sidebar: collapse removed
+
+The icon rail was a worse version of the same navigation — unlabelled glyphs, a "Toggle Sidebar"
+tooltip that stuck open over the nav, and a footer that overflowed the 48px width. It is
+`collapsible="none"` now, plus `sticky top-0 h-svh` because that mode renders a plain flex child that
+would otherwise scroll away with the page.
+
+Gone with it: `SidebarTrigger`, `SidebarRail`, the per-row tooltips (they only ever showed while
+collapsed) and the last `group-data-[collapsible=icon]` class, which was still sitting in
+`cli-status.tsx`. The expanded rail got the attention instead — 40px rows on a 2px pitch with an
+18px glyph, a hover state it never had, 26px between groups, and a footer that no longer fights a
+hairline inset. `/projects/[id]` now keeps Projects lit, which it did not before.
+
+Trade worth naming: `collapsible="none"` also drops shadcn's mobile sheet, so the rail always takes
+its 260px. Every screen in this app is a fixed two-column desktop grid, so that is the honest shape
+rather than a responsive promise nothing else keeps.
+
+## 2026-08-11 (evening) — artwork that scales, a project page worth visiting, and `kerf` on PATH
+
+### The badge scaling bug, root-caused
+
+Reported as "somewhere it is small, somewhere it is ok, somewhere it is perfect". Measured: every
+badge and crest is a `512×512` canvas, but each was exported with its own whitespace, so the ink
+covers anywhere from **27.7%** (`clean-run`) to **87.4%** (`steady-hand`). `BadgeArt`/`LeagueArt` map
+`size` onto the canvas, never the drawing — so at `size={22}` in the carousel `clean-run` rendered
+**6.6 × 6.1px** of ink beside `steady-hand`'s **19.2 × 4.4px**. Same prop, ~3× apparent width.
+
+Fixed at the source, not the call sites: each of the ten viewBoxes is now **squared on its own
+bounding box** plus 7%. Square rather than tight because both components render `width == height`, so
+a tight non-square box would letterbox and reintroduce the same problem on the other axis. No path
+data changed — the art is byte-identical, only the frame moved. The invariant is written into
+`artwork.tsx` so the next asset gets the same treatment.
+
+Also closed the hole I opened last round: `project-fallback.svg` was the only illustration not
+`320×240`, which made `Illustration`'s hardcoded 4:3 height wrong for it and reflowed the box on load.
+
+### New project artwork, researched rather than guessed
+
+GitHub's own rationale for rejecting the box metaphor decided this: *"some would say a repository is
+storage — a place where you store your code, somewhat like a box… at GitHub repositories are much
+more than that. A repository is the history of your project."* The old art was a crate — the exact
+motif they abandoned, and it collided with `publish-project.svg`'s server besides.
+
+The replacement is a folder carrying a git graph: a named thing on disk (which is what a Kerf project
+literally is) plus the history that distinguishes it from a box. Amber HEAD as the single focal, the
+same role amber plays in `insights.svg`. Drawn edge to edge at `320×240`, legible down to the 72px it
+renders at on a profile.
+
+Worth recording: **the Figma file has no asset library to reuse.** The `Assets — Kerf` page the specs
+describe does not exist, and `search_design_system` returns nothing for project/repo/folder — the
+`Kerf/Asset/Illustration/*` group ids in the SVGs are aspirational naming, not exports. All artwork
+here is authored locally, and any future Figma work has to create that page *from* these files.
+
+### Skill names
+
+`formatSkillLabel()` in `social.ts`, applied everywhere a skill is displayed. It strips packaging
+noise (`plugin_figma_figma` → `figma`, `figma:figma-use` → `figma-use`) but **keeps the result a
+slug** — that string is what you type into `kerf skills publish`, so Title Case would make the screen
+and the CLI disagree. The profile's ad-hoc `replace(/^skill:/, '')` is gone in favour of it.
+
+Skill of the Day is centred now — name, meta, then a facepile capped at **3** overlapping avatars with
+a `+N` chip — and the empty right half holds a new `skill-spotlight.svg`. Trending keeps its bars: its
+right half is already full and a second illustration would crowd five rows.
+
+### The project page
+
+The whole card navigates, via a **stretched link** rather than a wrapping anchor — the card already
+contains an `<a>` to the repo and a `<Link>` to the owner, and nested anchors are invalid HTML that
+browsers silently un-nest. The title's `::after` claims the surface; the inner links sit on `z-10`.
+Owner avatar added, GitHub mark moved up beside the name.
+
+`/projects/[id]` gained a hero (avatar, name, description, repo link) and **tabs that only exist for
+what the project has** — Overview always, Activity when it has sessions, Repository when GitHub
+resolved. An empty project shows one tab, not three dead ones.
+
+Two charts, on Recharts per the user's call, confined to `components/kerf/project-charts.tsx` so the
+dependency lands on one route: sessions-per-week from a new `/api/projects/:id/activity`, and a
+language pie from GitHub's `/languages`. The activity endpoint returns **counts only** — the comment
+next to it says why a week is the floor.
+
+### `kerf` on PATH
+
+`~/.local/bin/kerf`, a two-line wrapper. `npm i -g` fails on `workspace:*` and would copy
+`@kerf/shared` into `node_modules`, where Node refuses to strip types — the CLI works only because
+pnpm symlinks it and Node resolves the realpath outside `node_modules`. `pnpm link --global` needs
+`pnpm setup`, which rewrites `~/.zshrc`. The wrapper touches nothing and hardcodes the repo path,
+which is its one limitation.
+
+### Verification
+
+typecheck ×4; 61 shared / 37 backend / 1 cli; `next build` 0 warnings 0 errors.
+
+From the CLI, run as `kerf` from `/tmp`: dry run (26 sessions, 10 qualify), `kerf skills` (92 local,
+no network), `kerf projects` (8 local, no network), `kerf sync` (26 uploaded, 0 rejected),
+`kerf skills publish`, `kerf projects publish`, `kerf whoami`. `kerf live` correctly reported 0
+in-flight sessions — the newest transcript event was 57 minutes old, because this session runs under
+a `.claude-work` profile the extractor deliberately excludes; the beat path itself was verified by
+posting a heartbeat and watching the tile appear.
+
+From the UI: badges now read as one set at every size; skill names formatted; Skill of the Day centred
+with its spotlight; clicking empty card space navigates while the repo and owner links still reach
+their own targets; tabs appear per-project; the language pie renders real GitHub data (TypeScript 93%,
+JavaScript 5%, CSS 2%, Shell 0%) and the activity area chart draws 12 buckets. Cache still serves the
+second GitHub call in 8ms, and the SSRF guard still 404s `evilgithub.com` and `169.254.169.254`.
+
+### Toasts, and a YAML bug the toasts surfaced
+
+`sonner` mounted once in the root layout, bottom-right, firing on star / copy / publish / unpublish /
+visibility-toggle — the actions that previously changed a number somewhere and gave no other signal.
+The wrapper reads the `dark` class off `<html>` through a MutationObserver instead of next-themes,
+which this app does not use and does not need.
+
+Skill of the Day is left-aligned now with the illustration at 46% of the card and both columns
+stretched to full height. The illustration briefly went onto the shared-library skill cards too and
+was removed again on request.
+
+Publishing a real skill through the CLI to test the toast exposed a parser bug: `listLocalSkills`
+read `description:` as a scalar, so a SKILL.md using YAML's folded form (`description: >` with the
+text on following indented lines — which `caveman` does) published a description of literally `">"`.
+`frontmatter()` now consumes folded and literal blocks (`>`, `|`, `>-`, `|-`).
+
+### Sidebar footer, and the CLI grew a help
+
+The signed-in footer had the handle twice — once in the CliStatus row, once as a button under it. The
+button is gone. The status line now reads **In sync** behind a green dot rather than "CLI connected",
+because connected describes a socket that does not exist; what matters is whether your sessions are
+up here. It reads "Live" while a session is beating, and "Nothing synced yet" before the first sync.
+
+Hovering it explains itself: how many sessions are in sync, and when. That needed a real timestamp,
+so `/api/me/sessions` gained `lastSyncedMs` — the newest `createdAt` on a metric row, which is when
+`kerf sync` last *wrote*, not when the newest session ran. Those are different facts and the
+distinction is in a comment.
+
+`kerf` is a real CLI now. It had no `--help`, no `--version`, and — worse — **an unknown command fell
+through to the dry run**, so `kerf frobnicate` printed session statistics and exited 0. There is one
+`COMMANDS` table that both `kerf help` and every usage error print from, so they cannot drift; the
+help column width is computed rather than hardcoded (the longest usage line ran into its own
+description on the first attempt); commands that touch the network are marked, and the ones that do
+not are labelled `(local)`. Unknown commands and subcommands now exit 1 with the relevant usage line.
+
+Toasts were reported missing. They were not: the toaster mounts, and a click produces a
+`[data-sonner-toast]` with the right text, colours and position, with the document focused — verified
+three times. Made them harder to miss anyway: `richColors`, a close button, and 5s instead of 4.
+
+### A confirm dialog, a spinner, and the CLI-status art
+
+Three reusable pieces, because these were about to be written inline for the third time:
+
+- **`ConfirmDialog`** (`components/kerf/confirm-dialog.tsx`) — unpublishing is a delete, and a delete
+  that fires on one click with no way back is the kind of thing people only notice afterwards. It
+  owns its own pending state: `onConfirm` may return a promise, the button spins while it settles,
+  and **the dialog closes only on success**, so a failed delete leaves the error visible instead of
+  dismissing as though it worked. It also refuses to close mid-request.
+- **`Spinner`** / `LoadingRow` (`components/kerf/spinner.tsx`) — `currentColor`, so it inherits
+  whatever it sits in and there is no per-site colour prop to get wrong. Wired into both publish
+  forms, the connect dialog's two submit paths, the publicSkills switch, the confirm dialog, and the
+  GitHub panel while it waits. That last one also keeps the Repository tab mounted during `loading`
+  rather than popping it in after the fetch.
+- **CLI STATUS art** — was a 93px `cli-sync` pinned to the corner with `absolute right-[19px]`, which
+  looked stranded once that panel went full-width. It is a real 34% column now, same shape as the
+  project card.
