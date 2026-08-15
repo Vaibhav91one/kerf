@@ -1,11 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" fill="none">
 <g id="Kerf/Asset/Illustration/Live Activity">
-<!-- Recolored to the --live token's family (globals.css) so this reads as
-     the same "live" signal as the dot on live-card.tsx, not a clashing
+<!-- Recolored to the live-status token's family (globals.css) so this reads
+     as the same "live" signal as the dot on live-card.tsx, not a clashing
      pink/purple. Illustrations use their own fixed, vivid palette rather
      than the UI's CSS custom properties (this is an <img src>, which can't
-     resolve var() from the page anyway) — #54D9D1 is --live's dark-mode
-     value, already vivid enough to read on both light and dark cards. -->
+     resolve var() from the page anyway): #54D9D1 is that token's dark-mode
+     value, already vivid enough to read on both light and dark cards.
+
+     Reminder for whoever edits this comment next: a repeated hyphen
+     character anywhere inside an XML comment body is illegal (only the
+     closing marker may end in one). An earlier draft named the CSS token
+     by prefixing it with two hyphens right here in this comment and that
+     alone broke Chrome's SVG-as-image parser: it still rendered fine
+     inline, but silently failed to load via img src, which is this
+     file's entire job. Spell out "double hyphen" in words instead of
+     typing the character pair if this ever needs explaining again. -->
 <path id="Broadcast core" d="M160 148C177.673 148 192 133.673 192 116C192 98.3269 177.673 84 160 84C142.327 84 128 98.3269 128 116C128 133.673 142.327 148 160 148Z" fill="#54D9D1"/>
 <path id="Broadcast dot" d="M160 128C166.627 128 172 122.627 172 116C172 109.373 166.627 104 160 104C153.373 104 148 109.373 148 116C148 122.627 153.373 128 160 128Z" fill="white"/>
 <path id="Wave inner" d="M130 86C113 103 113 129 130 146M190 86C207 103 207 129 190 146" stroke="#54D9D1" stroke-width="10" stroke-linecap="round"/>
