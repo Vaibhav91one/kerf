@@ -1,8 +1,8 @@
 'use client';
 
 // Shell geometry from the comps: a 260px rail, then content inset 40px with the
-// page starting 42px down. The comps draw no top app bar — collapsing is the
-// keyboard shortcut the footer advertises, so no trigger chrome is rendered.
+// page starting 42px down. No top bar — the rail is the only chrome, and each
+// screen opens with its own PageHeader carrying that page's primary action.
 
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';

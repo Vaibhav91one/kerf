@@ -2,28 +2,40 @@
 
 // Screen `Light / 04 Skills` (130:346) and its dark twin (133:1516).
 //
-// The comp draws the league-usage view only. The Shared Library shipped after
-// those boards were drawn, so it is kept below rather than deleted to match a
-// picture — removing working publish/star/install would be the worse trade.
+// Shows skills and MCP servers, not tools: "Bash 1085" is a fact about Claude
+// Code, not about anyone's craft. Built-in rows are still served by
+// GET /api/skills and filtered here, so putting them back is a one-line change.
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { SignInButton } from '@clerk/nextjs';
+import { formatSkillLabel, searchNeedle } from '@kerf/shared';
 import { api, type SkillJson, type SkillTotal } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { Avatar } from '@/components/kerf/artwork';
+import { EmptyState } from '@/components/kerf/empty-state';
+import { SearchBox } from '@/components/kerf/search-box';
+import { SkillSheet, type SkillSheetSubject } from '@/components/kerf/skill-sheet';
 import { PageHeader, PageSkeleton, Panel, SectionLabel } from '@/components/kerf/ui';
+import { Button } from '@/components/ui/button';
 import { SharedLibrary } from './shared-library';
 
 export default function SkillsPage() {
+  const { auth, signedIn, clerkEnabled } = useAuth();
+  const [publishOpen, setPublishOpen] = useState(false);
   const [skills, setSkills] = useState<SkillTotal[] | null>(null);
   const [library, setLibrary] = useState<SkillJson[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [subject, setSubject] = useState<SkillSheetSubject | null>(null);
 
   useEffect(() => {
     api
       .skills()
       .then((r) => {
-        setSkills(r.skills);
-        setSelected(r.skills[0]?.name ?? null);
+        const shown = r.skills.filter((s) => s.kind !== 'builtin');
+        setSkills(shown);
+        setSelected(shown[0]?.name ?? null);
       })
       .catch(() => setSkills([]));
     api.skillLibrary('recent').then((r) => setLibrary(r.skills)).catch(() => {});
@@ -31,107 +43,132 @@ export default function SkillsPage() {
 
   if (!skills) return <PageSkeleton />;
 
-  const peak = skills.length > 0 ? skills[0].count : 1;
-  const focus = skills.find((s) => s.name === selected) ?? null;
-  const people = new Set(skills.flatMap((s) => s.topUsers.map((u) => u.handle))).size;
+  // Both the formatted label and the raw one: `fig` should find `figma`, and
+  // so should someone pasting `plugin_figma_figma` out of a config file.
+  const needle = searchNeedle(query);
+  const shown = needle
+    ? skills.filter((s) => [formatSkillLabel(s.label), s.label].some((f) => f.toLowerCase().includes(needle)))
+    : skills;
+
+  // Both derived from `shown`, not `skills`: filtering the selected row out used
+  // to leave the rail reading "WHO USES —" with an empty list, and the bars
+  // scaled against a peak that was no longer on screen.
+  const peak = shown.length > 0 ? shown[0].count : 1;
+  const focus = shown.find((s) => s.name === selected) ?? shown[0] ?? null;
 
   return (
     <div className="space-y-[28px]">
       <PageHeader
         title="Skills"
-        subtitle={`Aggregated from the ${people} profile${people === 1 ? '' : 's'} that turned public skills on. Names of tools and skills only — never their arguments.`}
+        action={
+          // Never disabled — signed out it opens sign-in, which is what someone
+          // clicking "Publish a skill" actually wants.
+          auth ? (
+            <Button onClick={() => setPublishOpen(true)}>Publish a skill</Button>
+          ) : signedIn || !clerkEnabled ? (
+            <Button nativeButton={false} render={<Link href="/me" />}>Publish a skill</Button>
+          ) : (
+            <SignInButton mode="modal">
+              <Button>Publish a skill</Button>
+            </SignInButton>
+          )
+        }
       />
 
-      <div className="grid grid-cols-[740fr_340fr] gap-5">
-        <Panel className="min-h-[690px]">
-          <SectionLabel>MOST USED ACROSS THE LEAGUE</SectionLabel>
-          <div className="mt-[12px] flex border-b border-border pb-[9px] text-[10px] font-semibold leading-[13px] text-primary">
-            <span className="flex-1">SKILL / TOOL</span>
-            <span className="w-[140px]">USES</span>
-            <span className="w-[84px]">PEOPLE</span>
+      <SearchBox
+        value={query}
+        onChange={setQuery}
+        placeholder="Search skills and MCP servers"
+        label="Search skills"
+        count={shown.length}
+      />
+
+      <div className="grid grid-cols-[740fr_340fr] items-start gap-5">
+        <Panel>
+          <SectionLabel>SKILLS &amp; MCP SERVERS</SectionLabel>
+          <div className="mt-[12px] flex gap-3 border-b border-border pb-[9px] text-[12px] font-semibold leading-[16px] text-primary">
+            <span className="min-w-0 flex-1">NAME</span>
+            <span className="w-[120px] shrink-0">USES</span>
+            <span className="w-[84px] shrink-0">PEOPLE</span>
           </div>
-          <div className="mt-[22px] space-y-[40px]">
-            {skills.map((s) => (
+          {/* Fixed height + scroll: the list is unbounded, the page should not be. */}
+          <div className="mt-[22px] max-h-[560px] space-y-[32px] overflow-y-auto pr-2">
+            {shown.map((s) => (
               <button
                 key={s.name}
                 type="button"
-                onClick={() => setSelected(s.name)}
+                // Both: the rail follows the row you clicked, and the sheet
+                // opens on top of it. A row used to be a dead end past the rail.
+                onClick={() => {
+                  setSelected(s.name);
+                  setSubject({ label: s.label, kind: s.kind, usage: { count: s.count, scope: 'league-wide' }, users: s.users, topUsers: s.topUsers });
+                }}
                 className="block w-full text-left"
                 aria-pressed={s.name === selected}
               >
-                <div className="flex items-baseline">
+                <div className="flex items-baseline gap-3">
+                  {/* min-w-0 + truncate: a flex item defaults to min-width:auto,
+                      so a long MCP server name would otherwise refuse to shrink
+                      and shove the count columns out of the panel. */}
                   <span
-                    className={`flex-1 text-[14px] ${s.name === selected ? 'font-medium text-foreground' : 'text-muted-foreground'}`}
+                    className={`min-w-0 flex-1 truncate text-[16px] ${s.name === selected ? 'font-medium text-foreground' : 'text-muted-foreground'}`}
                   >
-                    {s.name}
+                    {formatSkillLabel(s.label)}
                   </span>
-                  <span className="w-[140px] font-mono text-[13px] text-muted-foreground">
-                    {s.count.toLocaleString('en-US').replace(/,/g, ' ')}
+                  <span className="shrink-0 rounded-[10px] border border-border px-[8px] py-[1px] text-[12px] text-muted-foreground">
+                    {s.kind === 'mcp' ? 'MCP' : 'skill'}
                   </span>
-                  <span className="w-[84px] font-mono text-[13px] text-muted-foreground">{s.users}</span>
+                  <span className="w-[120px] shrink-0 font-mono text-[15px] text-muted-foreground">
+                    {s.count.toLocaleString('en-GB')}
+                  </span>
+                  <span className="w-[84px] shrink-0 font-mono text-[15px] text-muted-foreground">{s.users}</span>
                 </div>
-                <div className="mt-[10px] h-[8px] rounded-[4px] bg-secondary">
+                <div className="mt-[10px] h-[8px] overflow-hidden rounded-[4px] bg-secondary">
                   <div
                     className="h-[8px] rounded-[4px] bg-primary"
-                    style={{ width: `${Math.max(4, (s.count / peak) * 100)}%` }}
+                    style={{ width: `${Math.min(100, Math.max(4, (s.count / peak) * 100))}%` }}
                   />
                 </div>
               </button>
             ))}
-            {skills.length === 0 && (
-              <p className="text-[13px] text-muted-foreground">Nobody has turned public skills on yet.</p>
-            )}
+            {shown.length === 0 &&
+              (needle ? (
+                <p className="text-[15px] text-muted-foreground">Nothing matches “{query.trim()}”.</p>
+              ) : (
+                <EmptyState illustration="insights" title="No public skills yet">
+                  Skills appear here once someone turns on public skills in their account.
+                </EmptyState>
+              ))}
           </div>
         </Panel>
 
-        <div className="space-y-5">
-          <Panel className="min-h-[400px]">
-            <p className="text-[10px] font-semibold leading-[13px] text-foreground">
-              WHO USES {focus?.name ?? '—'}
-            </p>
-            <p className="mt-[5px] text-[11px] leading-[14px] text-muted-foreground">
-              Click a handle to open their profile.
-            </p>
-            <div className="mt-[16px] space-y-4">
-              {(focus?.topUsers ?? []).map((u) => (
-                <Link key={u.handle} href={`/people/${u.handle}`} className="flex items-center gap-[10px]">
-                  <Avatar handle={u.handle} size={28} className="shrink-0 rounded-full" />
-                  <span className="flex-1 text-[13px] font-medium text-foreground hover:underline">@{u.handle}</span>
-                  <span className="font-mono text-[13px] text-muted-foreground">{u.count}</span>
-                </Link>
-              ))}
-              {focus && focus.topUsers.length === 0 && (
-                <p className="text-[13px] text-muted-foreground">No opted-in account uses this yet.</p>
-              )}
-            </div>
-          </Panel>
-
-          <Panel className="min-h-[270px]">
-            <SectionLabel>HOW THIS LIST IS BUILT</SectionLabel>
-            <p className="mt-[10px] max-w-[300px] text-[13px] leading-[17px] text-muted-foreground">
-              The extractor counts tool_use blocks by name and ships the histogram. A skill name is an enum-ish
-              string the agent already emitted — the arguments beside it are never read.
-            </p>
-          </Panel>
-        </div>
+        <Panel className="sticky top-6">
+          <SectionLabel>WHO USES {focus ? formatSkillLabel(focus.label) : '—'}</SectionLabel>
+          <div className="mt-[16px] max-h-[560px] space-y-4 overflow-y-auto pr-1">
+            {(focus?.topUsers ?? []).map((u) => (
+              <Link key={u.handle} href={`/people/${u.handle}`} className="flex items-center gap-[10px]">
+                <Avatar handle={u.handle} size={28} className="shrink-0 rounded-full" />
+                <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-foreground hover:underline">
+                  @{u.handle}
+                </span>
+                <span className="shrink-0 font-mono text-[15px] text-muted-foreground">{u.count}</span>
+              </Link>
+            ))}
+            {focus && focus.topUsers.length === 0 && (
+              <p className="text-[15px] text-muted-foreground">No opted-in account uses this yet.</p>
+            )}
+          </div>
+        </Panel>
       </div>
 
-      <Panel className="min-h-[100px]">
-        <p className="max-w-[1000px] text-[13px] leading-[17px] text-muted-foreground">
-          Your skills are private until you flip the switch on <Link href="/me" className="underline">/me</Link>.
-          Turning it off hides you from this page immediately.
-        </p>
-      </Panel>
+      <SharedLibrary
+        initialSkills={library}
+        publishOpen={publishOpen}
+        onPublishOpenChange={setPublishOpen}
+        query={query}
+      />
 
-      <Panel>
-        <SectionLabel>SHARED LIBRARY</SectionLabel>
-        <p className="mt-[6px] text-[11px] leading-[14px] text-muted-foreground">
-          Skills people published by hand, not derived from anyone&apos;s transcripts.
-        </p>
-        <div className="mt-4">
-          <SharedLibrary initialSkills={library} />
-        </div>
-      </Panel>
+      {subject && <SkillSheet subject={subject} onClose={() => setSubject(null)} />}
     </div>
   );
 }

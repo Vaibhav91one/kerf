@@ -3,47 +3,44 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { LIMITS } from '@kerf/shared';
 import { api, ApiError, type SkillJson } from '@/lib/api';
+import { toast } from 'sonner';
+import { formatSkillLabel, searchNeedle } from '@kerf/shared';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { CommandBlock, CopyButton, Panel, SectionLabel } from '@/components/kerf/ui';
+import { EmptyState } from '@/components/kerf/empty-state';
+import { SkillSheet, type SkillSheetSubject } from '@/components/kerf/skill-sheet';
+import { Spinner } from '@/components/kerf/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-  SheetTrigger,
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => {
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-    >
-      {copied ? 'Copied!' : label}
-    </Button>
-  );
-}
-
-function PublishForm({ onPublished }: { onPublished: (s: SkillJson) => void }) {
+export function PublishForm({
+  onPublished,
+  open,
+  onOpenChange,
+}: {
+  onPublished: (s: SkillJson) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { auth, getToken } = useAuth();
-  const [open, setOpen] = useState(false);
+  const setOpen = onOpenChange;
+  // Two ways in: paste it here, or let the CLI read it off your disk. The CLI
+  // route is the better one — it fills name and description from the SKILL.md
+  // frontmatter instead of asking you to retype them.
+  const [mode, setMode] = useState<'cli' | 'manual'>('cli');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
+  // Chosen before the row exists, not flipped afterwards: publishing fans the
+  // new skill out over SSE, so a create-then-hide would broadcast it first.
+  const [isPublic, setIsPublic] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -55,38 +52,66 @@ function PublishForm({ onPublished }: { onPublished: (s: SkillJson) => void }) {
     try {
       const token = await getToken();
       if (!token) throw new Error('not signed in');
-      const skill = await api.createSkill(token, { name, description: description || undefined, content });
+      const skill = await api.createSkill(token, { name, description: description || undefined, content, isPublic });
       onPublished(skill);
+      toast.success('Skill published', {
+        description: isPublic
+          ? `Anyone can install it with kerf skill install ${skill.slug}`
+          : 'Only you can see it. Make it public from your account.',
+      });
       setOpen(false);
       setName('');
       setDescription('');
       setContent('');
+      setIsPublic(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to publish');
+      const message = err instanceof ApiError ? err.message : 'Failed to publish';
+      setError(message);
+      toast.error('Could not publish', { description: message });
     } finally {
       setBusy(false);
     }
   }
 
-  const trigger = <Button>Publish a skill</Button>;
-
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      {auth ? (
-        <SheetTrigger render={trigger} />
-      ) : (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger render={trigger} />
-            <TooltipContent>Connect on the Me page first</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
         <SheetHeader>
           <SheetTitle>Publish a skill</SheetTitle>
-          <SheetDescription>Shared with the whole league. Anyone can install it via the CLI.</SheetDescription>
+          {/* No longer an unconditional claim — a skill can be published private. */}
+          <SheetDescription>
+            Publish a skill to the shared library, or keep it to yourself. You choose below.
+          </SheetDescription>
         </SheetHeader>
+        <div className="flex gap-2 px-4">
+          <Button variant={mode === 'cli' ? 'default' : 'outline'} size="sm" onClick={() => setMode('cli')}>
+            Use the CLI
+          </Button>
+          <Button variant={mode === 'manual' ? 'default' : 'outline'} size="sm" onClick={() => setMode('manual')}>
+            Enter manually
+          </Button>
+        </div>
+
+        {mode === 'cli' ? (
+          <div className="flex-1 space-y-4 overflow-y-auto px-4">
+            <p className="text-sm text-muted-foreground">
+              Lists the skills in <span className="font-mono">~/.claude/skills</span>, then publishes the one you name.
+              Name and description come from its frontmatter.
+            </p>
+            {/* The --private line keeps the CLI and this sheet agreeing about
+                what is possible; without it the switch below looks web-only. */}
+            <CommandBlock
+              lines={[
+                ['kerf skills'],
+                ['kerf skills publish <slug>'],
+                ['kerf skills publish <slug> --private', '# only you can see it'],
+              ]}
+            />
+            <p className="text-xs text-muted-foreground">
+              The first command makes no network call — it prints to your terminal only.
+            </p>
+          </div>
+        ) : (
         <form onSubmit={onSubmit} className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
           <div className="space-y-1.5">
             <Label htmlFor="skill-name">Name</Label>
@@ -113,75 +138,122 @@ function PublishForm({ onPublished }: { onPublished: (s: SkillJson) => void }) {
               required
             />
           </div>
+          <div className="flex items-start justify-between gap-4 rounded-[12px] border border-border px-4 py-3">
+            <div className="min-w-0">
+              <Label htmlFor="skill-public">{isPublic ? 'Public' : 'Private'}</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {isPublic
+                  ? 'Listed in the shared library. Anyone can install it.'
+                  : 'Only you can see it — it is absent from the library, not greyed out.'}
+              </p>
+            </div>
+            <Switch
+              id="skill-public"
+              checked={isPublic}
+              onCheckedChange={setIsPublic}
+              aria-label="Publish this skill publicly"
+              className="mt-1 shrink-0"
+            />
+          </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <SheetFooter className="px-0">
             <Button type="submit" disabled={busy}>
+              {busy && <Spinner className="mr-2" />}
               {busy ? 'Publishing…' : 'Publish'}
             </Button>
           </SheetFooter>
         </form>
+        )}
       </SheetContent>
     </Sheet>
   );
 }
 
-function SkillDetail({ skill, onClose }: { skill: SkillJson; onClose: () => void }) {
-  return (
-    <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>{skill.name}</SheetTitle>
-          <SheetDescription>
-            @{skill.handle} · {skill.starCount} stars · {skill.installCount} installs
-          </SheetDescription>
-        </SheetHeader>
-        <div className="flex-1 overflow-y-auto px-4">
-          {skill.description && <p className="mb-3 text-sm text-muted-foreground">{skill.description}</p>}
-          <pre className="whitespace-pre-wrap rounded-md border bg-muted p-3 text-xs">{skill.content}</pre>
-        </div>
-        <SheetFooter className="flex-row gap-2">
-          <CopyButton text={skill.content} label="Copy content" />
-          <CopyButton text={`kerf skill install ${skill.slug}`} label="Copy install command" />
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-export function SharedLibrary({ initialSkills }: { initialSkills: SkillJson[] }) {
+export function SharedLibrary({
+  initialSkills,
+  publishOpen,
+  onPublishOpenChange,
+  query = '',
+}: {
+  initialSkills: SkillJson[];
+  publishOpen: boolean;
+  onPublishOpenChange: (open: boolean) => void;
+  /** The page's one search box also narrows the library. */
+  query?: string;
+}) {
   const { auth, getToken } = useAuth();
   const [skills, setSkills] = useState(initialSkills);
   const [sort, setSort] = useState<'recent' | 'stars'>('recent');
   const [starred, setStarred] = useState<Set<string>>(
     () => new Set(initialSkills.filter((s) => s.isStarredByMe).map((s) => s.id)),
   );
-  const [detail, setDetail] = useState<SkillJson | null>(null);
+  // The card already holds the whole row, so the sheet gets `entry` and makes
+  // no request of its own.
+  const [detail, setDetail] = useState<SkillSheetSubject | null>(null);
 
   useEffect(() => {
-    api.skillLibrary(sort, auth?.token).then((res) => {
-      setSkills(res.skills);
-      setStarred(new Set(res.skills.filter((s) => s.isStarredByMe).map((s) => s.id)));
-    });
-  }, [sort, auth?.token]);
+    // getToken(), not the auth.token snapshot: a Clerk JWT older than about a
+    // minute resolves to no viewer, which drops the owner's own PRIVATE skills
+    // out of the list and renders every star unstarred.
+    void getToken()
+      .catch(() => null)
+      .then((t) => api.skillLibrary(sort, t ?? undefined))
+      .then((res) => {
+        setSkills(res.skills);
+        setStarred(new Set(res.skills.filter((s) => s.isStarredByMe).map((s) => s.id)));
+      })
+      .catch(() => {});
+  }, [sort, getToken]);
 
   async function toggleStar(id: string) {
     if (!auth) return;
     const token = await getToken();
     if (!token) return;
-    const res = await api.toggleSkillStar(token, id);
-    setStarred((prev) => {
-      const next = new Set(prev);
-      if (res.starred) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-    setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, starCount: res.starCount } : s)));
+    try {
+      const res = await api.toggleSkillStar(token, id);
+      setStarred((prev) => {
+        const next = new Set(prev);
+        if (res.starred) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+      setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, starCount: res.starCount } : s)));
+      toast.success(res.starred ? 'Starred' : 'Star removed');
+    } catch {
+      toast.error('Could not update your star');
+    }
   }
 
+  const needle = searchNeedle(query);
+  const shown = needle
+    ? skills.filter((s) =>
+        [s.name, s.description ?? '', s.handle].some((f) => f.toLowerCase().includes(needle)),
+      )
+    : skills;
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2">
+    <>
+      {/* Panel + SectionLabel like every other block on this page — this used
+          to be a bare div with no title and no border, which read as loose
+          cards after the page ended rather than a section. Content and sort
+          were already fine; only the framing was missing. */}
+      <Panel>
+        <div className="flex items-center justify-between">
+          <SectionLabel>SHARED LIBRARY</SectionLabel>
+          <PublishForm
+            open={publishOpen}
+            onOpenChange={onPublishOpenChange}
+            onPublished={(s) => {
+              setSkills((prev) => [s, ...prev]);
+              setStarred((prev) => {
+                const next = new Set(prev);
+                if (s.isStarredByMe) next.add(s.id);
+                return next;
+              });
+            }}
+          />
+        </div>
+        <div className="mt-[16px] flex gap-2">
           <Button variant={sort === 'recent' ? 'default' : 'outline'} size="sm" onClick={() => setSort('recent')}>
             Recent
           </Button>
@@ -189,25 +261,21 @@ export function SharedLibrary({ initialSkills }: { initialSkills: SkillJson[] })
             Most starred
           </Button>
         </div>
-        <PublishForm
-          onPublished={(s) => {
-            setSkills((prev) => [s, ...prev]);
-            setStarred((prev) => {
-              const next = new Set(prev);
-              if (s.isStarredByMe) next.add(s.id);
-              return next;
-            });
-          }}
-        />
-      </div>
 
-      {skills.length === 0 && <p className="text-sm text-muted-foreground">No skills shared yet — be the first.</p>}
+        {shown.length === 0 &&
+          (needle ? (
+            <p className="mt-[16px] text-[15px] text-muted-foreground">No shared skill matches “{query.trim()}”.</p>
+          ) : (
+            <EmptyState illustration="publish-project" title="No skills shared yet" className="mt-[16px]">
+              Publish one of your own and anyone can install it with the CLI.
+            </EmptyState>
+          ))}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {skills.map((s) => (
-          <Card key={s.id} className="cursor-pointer" onClick={() => setDetail(s)}>
+        <div className="mt-[16px] grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {shown.map((s) => (
+          <Card key={s.id} className="cursor-pointer" onClick={() => setDetail({ label: s.name, entry: s })}>
             <CardHeader>
-              <CardTitle className="text-base">{s.name}</CardTitle>
+              <CardTitle className="text-base">{formatSkillLabel(s.name)}</CardTitle>
               <CardDescription className="line-clamp-2">{s.description ?? 'No description.'}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -234,10 +302,11 @@ export function SharedLibrary({ initialSkills }: { initialSkills: SkillJson[] })
               </div>
             </CardContent>
           </Card>
-        ))}
-      </div>
+          ))}
+        </div>
+      </Panel>
 
-      {detail && <SkillDetail skill={detail} onClose={() => setDetail(null)} />}
-    </div>
+      {detail && <SkillSheet subject={detail} onClose={() => setDetail(null)} />}
+    </>
   );
 }

@@ -2,6 +2,12 @@
 // every function here maps 1:1 to a route in apps/backend/src/index.ts.
 import type { SessionMetric } from '@kerf/shared';
 
+// A silent localhost fallback in production means every browser fetches a
+// backend that doesn't exist there — the build succeeds and the outage has no
+// error anywhere. Throwing at build/boot time turns that into a failed deploy.
+if (!process.env.NEXT_PUBLIC_API_URL && process.env.NODE_ENV === 'production') {
+  throw new Error('NEXT_PUBLIC_API_URL is not set — see zerops.yml build.envVariables');
+}
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3211';
 
 export class ApiError extends Error {
@@ -31,17 +37,26 @@ async function request<T>(path: string, init?: RequestInit & { token?: string })
   return res.json() as Promise<T>;
 }
 
-export type Standing = {
-  /** §7.2 season score: the winsorised median of the player's qualifying sessions. */
-  score: number | null;
-  tier: 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond' | null;
-  progress: { next: string; pct: number } | null;
+export type Tier = 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond';
+
+/** Lifetime points and the level they buy — see packages/shared/src/points.ts. */
+export type Rank = { tier: Tier; next: Tier | null; nextAt: number | null; pct: number };
+
+export type Standing = Rank & {
+  points: number;
   sessionCount: number;
 };
 
-export type Badge = { id: string; label: string; earned: boolean };
+export type Badge = {
+  id: string;
+  label: string;
+  earned: boolean;
+  /** have is clamped to need, so have/need is a bar fraction. */
+  progress: { have: number; need: number };
+  /** One imperative line: what to do to earn it. */
+  requirement: string;
+};
 export type Tip = { id: string; title: string; message: string; trigger: string };
-export type TierCuts = { p20: number; p50: number; p80: number; p95: number };
 
 export type PublicProfile = {
   handle: string;
@@ -58,7 +73,14 @@ export type PublicProfile = {
   publicSkills: boolean;
   skills: Record<string, number> | null;
   projects: ProjectJson[];
+  followerCount: number;
+  followingCount: number;
+  isFollowedByMe: boolean;
+  isRivalOfMe: boolean;
 };
+
+/** One row of GET /api/me/follows — who you follow, and which are rivals. */
+export type FollowEdge = { handle: string; isRival: boolean };
 
 /** Row shape of the public directory — GET /api/profiles in apps/backend/src/index.ts. */
 export type PublicProfileSummary = Pick<
@@ -74,8 +96,16 @@ export type ProjectJson = {
   name: string;
   description: string | null;
   repoUrl: string | null;
+  /** http(s)-only, same allow-list as repoUrl. Null falls back to illustration. */
+  logoUrl: string | null;
+  /**
+   * False = published but not public. A private row is ABSENT from every public
+   * read, so a stranger only ever receives `true` here — it exists so the
+   * owner's own screens can draw the toggle.
+   */
+  isPublic: boolean;
   createdAtMs: number;
-  /** Sessions carrying this project's hash. Present on the list route only. */
+  /** Sessions carrying this project's hash. Served by both the list and detail routes. */
   sessionCount?: number;
 };
 
@@ -94,41 +124,97 @@ export type LiveSessionJson = {
 export type ChatMessageJson = { id: string; handle: string; body: string; createdAtMs: number };
 
 export type SkillTotal = {
+  /** Aggregation key, `${kind}:${label}` — unique, not for display. */
   name: string;
+  /** `skill` = a Claude Code skill, `mcp` = one MCP server, `builtin` = a tool. */
+  kind: 'skill' | 'mcp' | 'builtin';
+  /** What to show: the skill slug, or the MCP server name. */
+  label: string;
   count: number;
   users: number;
   /** Highest-count handles for this tool, opted-in accounts only. */
   topUsers: { handle: string; count: number }[];
 };
 
-export type MySession = SessionMetric & { tips: Tip[] };
+/** GitHub's public repo facts, whitelisted and sanitised by the backend proxy. */
+export type RepoJson = {
+  /** Byte counts per language, biggest first — the pie's data. */
+  languages: { name: string; bytes: number }[];
+  fullName: string | null;
+  description: string | null;
+  homepage: string | null;
+  stars: number;
+  forks: number;
+  openIssues: number;
+  language: string | null;
+  topics: string[];
+  pushedAtMs: number | null;
+  archived: boolean;
+};
+
+export type ProjectDetail = ProjectJson & { liveSessions: number; sessionCount: number };
+
+/** Aggregate counts only (§6) — no session ids, no per-session timestamps. */
+export type ProjectActivity = { weeks: { weekStartMs: number; sessions: number }[] };
+
+export type SkillsResponse = {
+  window: '7d' | 'all';
+  skills: SkillTotal[];
+  /** Rotates at 00:00 UTC over the most-used skills. Null when there are none. */
+  skillOfTheDay: SkillTotal | null;
+};
+
+export type MySession = SessionMetric & { points: number; tips: Tip[] };
+
+/** A CLI credential — never the token itself, only a digest is ever stored. */
+export type ApiTokenJson = { id: string; label: string; createdAtMs: number };
 
 export type MeSessions = {
   sessions: MySession[];
   toolTotals: Record<string, number>;
+  totalPoints: number;
+  monthPoints: number;
+  rank: Rank;
+  /** False until `kerf login` has minted a token — /me hides the connect steps once true. */
+  hasCliToken: boolean;
+  /**
+   * Your OWN live sessions, private projects included. The sidebar's Live dot
+   * reads these rather than the public feed, which now hides a session in a
+   * private project from everyone — the owner included.
+   */
+  liveSessions: number;
+  lastBeatMs: number | null;
+  /** When `kerf sync` last wrote a row, not when the newest session ran. */
+  lastSyncedMs: number | null;
   streak: number;
   badges: Badge[];
+  /** §7.4's season floor for the current UTC month. */
+  seasonQualification: { qualified: boolean; sessions: number; commits: number };
 };
 
 export type SeasonStanding = {
   handle: string;
-  /** §7.2 season score: the winsorised median of this player's qualifying sessions. */
-  score: number;
-  tier: Standing['tier'];
+  /** Lifetime points — what the crest is cut from. */
+  points: number;
+  /** Points earned this UTC month — what the board is ordered on. */
+  monthPoints: number;
+  tier: Tier;
   sessionCount: number;
-  /** Display-only, like sessionCount — the board is ordered on the ratio alone (§7.2). */
   streak: number;
+  /** §7.4's season floor: 10 qualifying sessions AND 5 commits this month. */
+  qualified: boolean;
+  seasonSessions: number;
+  seasonCommits: number;
 };
 
 export type SeasonCurrent = {
-  metric: 'rework_ratio';
-  higherIsBetter: false;
+  metric: 'points';
   sampleSize: number;
-  cuts: TierCuts;
-  /** Ten fixed buckets across [0,1] — counts of qualifying sessions per band. */
-  histogram: number[];
+  /** Fixed point thresholds per level, in ascending order. */
+  levels: { tier: Tier; min: number }[];
+  /** The §7.4 numbers standings.qualified is computed from — never hand-type these. */
+  floor: { sessions: number; commits: number };
   standings: SeasonStanding[];
-  ghosts: unknown[];
 };
 
 export type SkillJson = {
@@ -140,6 +226,8 @@ export type SkillJson = {
   content: string;
   installCount: number;
   starCount: number;
+  /** Same contract as ProjectJson.isPublic. */
+  isPublic: boolean;
   createdAtMs: number;
   isStarredByMe?: boolean;
 };
@@ -151,6 +239,8 @@ export type OwnProfile = {
   displayName: string;
   bio: string | null;
   publicSkills: boolean;
+  /** `${kind}:${label}` keys hidden from every public surface. Own account only. */
+  hiddenSkills: string[];
   avatarUrl: string | null;
   websiteUrl: string | null;
   githubUrl: string | null;
@@ -201,8 +291,29 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  claimCliLogin: (token: string, code: string) =>
-    request<{ status: 'claimed'; handle: string }>(`/api/cli-login/${encodeURIComponent(code)}/claim`, { method: 'POST', token }),
+  /**
+   * `userCode` is what the person typed off their own terminal — the device
+   * code the CLI is actually polling with is never sent to, or known by, the
+   * browser. Typing it is the consent step a phishing link can't forge.
+   */
+  claimCliLogin: (token: string, userCode: string) =>
+    request<{ status: 'claimed'; handle: string }>(`/api/cli-login/user/${encodeURIComponent(userCode)}/claim`, {
+      method: 'POST',
+      token,
+    }),
+
+  /**
+   * Is this userCode still live? Lets the connect page say "expired" as soon
+   * as it's typed rather than after the whole claim round-trip.
+   *
+   * Deliberately NOT `GET /api/cli-login/:deviceCode` — that route is the
+   * CLI's collection point and requires the device code, which the browser
+   * never has.
+   */
+  cliLoginStatus: (userCode: string) =>
+    request<{ status: 'pending' | 'claimed' | 'expired' }>(
+      `/api/cli-login/user/${encodeURIComponent(userCode)}/status`,
+    ),
 
   createProfile: (body: { handle: string; displayName: string; bio?: string; publicSkills?: boolean }) =>
     request<{ handle: string; token: string }>('/api/profiles', { method: 'POST', body: JSON.stringify(body) }),
@@ -236,15 +347,46 @@ export const api = {
 
   profiles: () => request<{ profiles: PublicProfileSummary[] }>('/api/profiles'),
 
-  profile: (handle: string) => request<PublicProfile>(`/api/profiles/${encodeURIComponent(handle)}`),
+  // token is optional and only affects two output fields — isFollowedByMe and
+  // isRivalOfMe — computed from the viewer the backend derives via
+  // optionalHandle(req). Without it (server-side metadata fetch, or a signed-
+  // out visitor) those two fields come back false, which is correct: an
+  // anonymous viewer follows nobody.
+  profile: (handle: string, token?: string) =>
+    request<PublicProfile>(`/api/profiles/${encodeURIComponent(handle)}`, { token }),
 
 
-  skills: () => request<{ skills: SkillTotal[] }>('/api/skills'),
+  skills: (window?: '7d') => request<SkillsResponse>(`/api/skills${window ? `?window=${window}` : ''}`),
 
-  projects: () => request<{ projects: ProjectJson[] }>('/api/projects'),
+  /** With a token the caller also gets their own private rows — /me needs that. */
+  projects: (token?: string) => request<{ projects: ProjectJson[] }>('/api/projects', { token }),
 
-  createProject: (token: string, body: { name: string; description?: string; repoUrl?: string }) =>
-    request<ProjectJson>('/api/projects', { method: 'POST', token, body: JSON.stringify(body) }),
+  project: (id: string, token?: string) => request<ProjectDetail>(`/api/projects/${encodeURIComponent(id)}`, { token }),
+
+  /** 404 simply means "this project has no github repo" — not an error. */
+  projectGithub: (id: string, token?: string) =>
+    request<RepoJson>(`/api/projects/${encodeURIComponent(id)}/github`, { token }),
+
+  projectActivity: (id: string, token?: string) =>
+    request<ProjectActivity>(`/api/projects/${encodeURIComponent(id)}/activity`, { token }),
+
+  createProject: (
+    token: string,
+    body: { name: string; description?: string; repoUrl?: string; logoUrl?: string; isPublic?: boolean },
+  ) => request<ProjectJson>('/api/projects', { method: 'POST', token, body: JSON.stringify(body) }),
+
+  setProjectVisibility: (token: string, id: string, isPublic: boolean) =>
+    request<{ ok: true; isPublic: boolean }>(`/api/projects/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify({ isPublic }),
+    }),
+
+  deleteProject: (token: string, id: string) =>
+    request<{ ok: true }>(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
+
+  deleteSkill: (token: string, id: string) =>
+    request<{ ok: true }>(`/api/skill-library/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
 
   liveSessions: () => request<{ sessions: LiveSessionJson[] }>('/api/live/sessions'),
 
@@ -255,6 +397,26 @@ export const api = {
 
   mySessions: (token: string) => request<MeSessions>('/api/me/sessions', { token }),
 
+  myTokens: (token: string) => request<{ tokens: ApiTokenJson[] }>('/api/me/tokens', { token }),
+
+  revokeToken: (token: string, id: string) =>
+    request<{ ok: true }>(`/api/me/tokens/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
+
+  myFollows: (token: string) => request<{ following: FollowEdge[] }>('/api/me/follows', { token }),
+
+  toggleFollow: (token: string, handle: string) =>
+    request<{ following: boolean; followerCount: number }>(`/api/follows/${encodeURIComponent(handle)}`, {
+      method: 'POST',
+      token,
+    }),
+
+  setRival: (token: string, handle: string, isRival: boolean) =>
+    request<{ isRival: boolean }>(`/api/follows/${encodeURIComponent(handle)}`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify({ isRival }),
+    }),
+
   seasonCurrent: () => request<SeasonCurrent>('/api/season/current'),
 
   skillLibrary: (sort?: 'stars' | 'recent', token?: string) =>
@@ -263,8 +425,23 @@ export const api = {
   skillBySlug: (slug: string, token?: string) =>
     request<SkillDetail>(`/api/skill-library/by-slug/${encodeURIComponent(slug)}`, { token }),
 
-  createSkill: (token: string, body: { name: string; description?: string; content: string }) =>
+  createSkill: (token: string, body: { name: string; description?: string; content: string; isPublic?: boolean }) =>
     request<SkillJson>('/api/skill-library', { method: 'POST', token, body: JSON.stringify(body) }),
+
+  setSkillVisibility: (token: string, id: string, isPublic: boolean) =>
+    request<{ ok: true; isPublic: boolean }>(`/api/skill-library/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify({ isPublic }),
+    }),
+
+  /** Last-write-wins over the whole list — one person editing their own preference. */
+  setHiddenSkills: (token: string, hiddenSkills: string[]) =>
+    request<{ hiddenSkills: string[] }>('/api/me/skill-visibility', {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify({ hiddenSkills }),
+    }),
 
   toggleSkillStar: (token: string, id: string) =>
     request<{ starred: boolean; starCount: number }>(`/api/skill-library/${id}/star`, { method: 'POST', token }),

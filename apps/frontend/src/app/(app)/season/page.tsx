@@ -1,164 +1,264 @@
 'use client';
 
 // Screen `Light / 07 Season` (131:122) and its dark twin (133:1858).
+//
+// The comp's TIER CUTS table printed percentiles ("p80 · 0.62 · Silver"), which
+// only meant something to whoever wrote the spec. Levels are fixed point
+// thresholds now, so the table states the price of each crest. The distribution
+// histogram is gone with the cuts it described.
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { api, type SeasonCurrent } from '@/lib/api';
+import { SignInButton } from '@clerk/nextjs';
+import { SESSION_MIN_EDITS, SESSION_MIN_TURNS } from '@kerf/shared';
+import { api, type MeSessions, type SeasonCurrent } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { PageHeader, PageSkeleton, Panel, SectionLabel } from '@/components/kerf/ui';
-
-// Read down the table: each percentile is the worst ratio still inside that
-// tier. Diamond has no cut above it — it is simply everything below p20.
-const CUT_ROWS = [
-  { pct: 'p95', key: 'p95', tier: 'Bronze' },
-  { pct: 'p80', key: 'p80', tier: 'Silver' },
-  { pct: 'p50', key: 'p50', tier: 'Gold' },
-  { pct: 'p20', key: 'p20', tier: 'Platinum' },
-] as const;
+import { useRefresh } from '@/hooks/use-refresh';
+import { BadgeArt, LeagueArt } from '@/components/kerf/artwork';
+import { EmptyState } from '@/components/kerf/empty-state';
+import { CommandBlock, PageHeader, PageSkeleton, Panel, SectionLabel } from '@/components/kerf/ui';
+import { Button } from '@/components/ui/button';
+import { seasonNumber } from '@/lib/time';
 
 export default function SeasonPage() {
-  const { auth } = useAuth();
+  const { auth, signedIn, clerkEnabled, getToken } = useAuth();
   const [season, setSeason] = useState<SeasonCurrent | null>(null);
+  const [me, setMe] = useState<MeSessions | null>(null);
+  // Without this a backend failure holds the skeleton forever — the 30s poll
+  // below will eventually recover on its own once the backend does, but the
+  // first failed attempt should say so rather than pulse silently.
+  const [failed, setFailed] = useState(false);
+
+  // The board is the one screen where "the number I am looking at is current"
+  // is the whole product, and it used to be frozen at page load.
+  const { tick } = useRefresh();
 
   useEffect(() => {
-    api.seasonCurrent().then(setSeason).catch(() => {});
-  }, []);
+    api
+      .seasonCurrent()
+      .then((s) => {
+        setSeason(s);
+        setFailed(false);
+      })
+      .catch(() => setFailed(true));
+  }, [tick]);
 
+  useEffect(() => {
+    if (!auth) {
+      setMe(null);
+      return;
+    }
+    void getToken().then((t) => (t ? api.mySessions(t).then(setMe) : null)).catch(() => setMe(null));
+  }, [auth, getToken, tick]);
+
+  if (failed && !season) {
+    return <p className="text-[16px] text-muted-foreground">Could not load the season board. Retrying…</p>;
+  }
   if (!season) return <PageSkeleton />;
-  const { cuts, standings, histogram, ghosts } = season;
-
+  const { levels, standings } = season;
   const mine = auth ? standings.find((s) => s.handle === auth.handle) ?? null : null;
-  const buckets = histogram ?? [];
-  const peak = Math.max(1, ...buckets);
-  // Which band you sit in, so the chart can mark it the way the comp does.
-  const myBucket =
-    mine === null ? -1 : Math.min(buckets.length - 1, Math.max(0, Math.floor(mine.score * buckets.length)));
 
   return (
     <div className="space-y-[28px]">
       <PageHeader
-        title="Season 1"
-        subtitle={`Metric: rework ratio, lower is better. Cuts recompute from the live distribution of ${season.sampleSize} qualifying session${season.sampleSize === 1 ? '' : 's'}.`}
+        title={`Season ${seasonNumber()}`}
+        subtitle={`${standings.length} player${standings.length === 1 ? '' : 's'} this month.`}
       />
+
+      {/* Where the viewer stands relative to the board. Public page, so it has
+          to say something useful signed out too. */}
+      <Panel>
+        {mine ? (
+          <>
+            <SectionLabel>YOUR STANDING</SectionLabel>
+            {mine.qualified ? (
+              <p className="mt-[10px] text-[16px] leading-[23px] text-foreground">
+                #{standings.filter((s) => s.qualified).indexOf(mine) + 1} of{' '}
+                {standings.filter((s) => s.qualified).length} with {mine.monthPoints.toLocaleString('en-GB')} points
+                this month.
+              </p>
+            ) : (
+              <>
+                <p className="mt-[10px] text-[16px] leading-[23px] text-foreground">
+                  Not yet ranked — a place on the board needs both halves of the floor.
+                </p>
+                <p className="mt-[6px] text-[14px] leading-[18px] text-muted-foreground">
+                  {mine.seasonSessions} of {season.floor.sessions} qualifying sessions · {mine.seasonCommits} of{' '}
+                  {season.floor.commits} commits this month.
+                </p>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <SectionLabel>YOU ARE NOT ON THIS BOARD YET</SectionLabel>
+            <p className="mt-[10px] max-w-[720px] text-[16px] leading-[23px] text-muted-foreground">
+              {auth
+                ? 'Connect the CLI and sync a session to take a place on the board.'
+                : 'Sign in and connect the CLI to take a place on the board.'}
+            </p>
+            <div className="mt-[16px]">
+              {auth || !clerkEnabled || signedIn ? (
+                <Button nativeButton={false} render={<Link href="/me" />}>
+                  {auth ? 'Connect your CLI' : 'Sign in'}
+                </Button>
+              ) : (
+                <SignInButton mode="modal">
+                  <Button>Sign in</Button>
+                </SignInButton>
+              )}
+            </div>
+            <CommandBlock
+              className="mt-[18px] max-w-[620px]"
+              lines={[['kerf login'], ['kerf sync', '# upload session history']]}
+            />
+          </>
+        )}
+      </Panel>
 
       <div className="grid grid-cols-2 gap-5">
         <Panel className="min-h-[330px]">
-          <SectionLabel>TIER CUTS</SectionLabel>
+          <SectionLabel>LEVELS</SectionLabel>
           <table className="mt-[12px] w-full table-fixed">
             <thead>
-              <tr className="border-b border-border text-left align-top [&>th]:pb-[9px] [&>th]:text-[10px] [&>th]:font-semibold [&>th]:leading-[13px] [&>th]:text-primary">
-                <th className="w-[200px]">PERCENTILE</th>
-                <th className="w-[160px]">RATIO AT CUT</th>
-                <th>TIER AT OR BELOW</th>
+              <tr className="border-b border-border text-left align-top [&>th]:pb-[9px] [&>th]:text-[12px] [&>th]:font-semibold [&>th]:leading-[16px] [&>th]:text-primary">
+                <th className="w-[80px]">CREST</th>
+                <th>LEVEL</th>
+                <th className="w-[180px]">POINTS</th>
               </tr>
             </thead>
             <tbody>
-              {CUT_ROWS.map((r) => (
-                <tr key={r.pct}>
-                  <td className="py-[13px] font-mono text-[13px] text-muted-foreground">{r.pct}</td>
-                  <td className="py-[13px] font-mono text-[13px] text-muted-foreground">{cuts[r.key].toFixed(2)}</td>
-                  <td className="py-[13px] text-[13px] text-muted-foreground">{r.tier}</td>
+              {levels.map((l) => (
+                <tr key={l.tier}>
+                  <td className="py-[11px]">
+                    <LeagueArt tier={l.tier} size={32} />
+                  </td>
+                  <td className="py-[11px] text-[15px] text-muted-foreground">{l.tier}</td>
+                  <td className="py-[11px] font-mono text-[15px] text-muted-foreground">
+                    {l.min === 0 ? 'from the first session' : `${l.min.toLocaleString('en-GB')}+`}
+                  </td>
                 </tr>
               ))}
-              <tr>
-                <td className="py-[13px] font-mono text-[13px] font-medium text-foreground">—</td>
-                <td className="py-[13px] font-mono text-[13px] font-medium text-foreground">
-                  below {cuts.p20.toFixed(2)}
-                </td>
-                <td className="py-[13px] text-[13px] font-medium text-foreground">Diamond</td>
-              </tr>
             </tbody>
           </table>
-          <p className="mt-[10px] max-w-[500px] text-[11px] leading-[14px] text-muted-foreground">
-            Higher percentile means a worse ratio — the ladder inverts for this metric.
-          </p>
         </Panel>
 
-        <Panel className="flex min-h-[330px] flex-col">
-          <SectionLabel>
-            DISTRIBUTION — {season.sampleSize} QUALIFYING SESSION{season.sampleSize === 1 ? '' : 'S'}
-          </SectionLabel>
-          <div className="mt-4 flex flex-1 items-end gap-3 px-[14px]">
-            {buckets.map((count, i) => (
-              <div key={i} className="flex flex-1 flex-col items-center gap-2">
-                <div
-                  className={`w-full rounded-[4px] ${i === myBucket ? 'bg-primary' : 'bg-secondary'}`}
-                  style={{ height: `${Math.max(6, (count / peak) * 216)}px` }}
-                />
-                <span className="font-mono text-[10px] text-primary">{count}</span>
-              </div>
-            ))}
+        <Panel className="min-h-[330px]">
+          <SectionLabel>HOW POINTS ARE EARNED</SectionLabel>
+          <div className="mt-[16px] space-y-[14px] text-[15px] leading-[20px] text-muted-foreground">
+            <p>
+              <span className="text-foreground">Edits that stick.</span> An edit you never have to redo is worth more
+              than three you do. The count grows on a log scale, so a huge session cannot bury a careful one.
+            </p>
+            <p>
+              <span className="text-foreground">Precision.</span> The share of your edits that landed first time. This
+              is the largest part of a session&apos;s score.
+            </p>
+            <p>
+              <span className="text-foreground">Focus.</span> How much lands per prompt, capped — one enormous write
+              hits the ceiling instead of running away with the board.
+            </p>
+            <p className="text-[13px]">
+              A session must clear the floor ({SESSION_MIN_TURNS} human turns, {SESSION_MIN_EDITS} edit) to score at
+              all, and each day&apos;s points are capped. Running the CLI more is not a strategy.
+            </p>
           </div>
-          <div className="mt-[6px] flex justify-between font-mono text-[10px] text-primary">
-            <span>0.0</span>
-            <span>1.0</span>
-          </div>
-          <p className="mt-[12px] max-w-[500px] text-[11px] leading-[14px] text-muted-foreground">
-            {myBucket >= 0
-              ? `Your band holds ${buckets[myBucket]} session${buckets[myBucket] === 1 ? '' : 's'}. The bar is where you sit, not where you rank.`
-              : 'The bar is where a ratio sits, not where anyone ranks.'}
-          </p>
         </Panel>
       </div>
 
+      {me && (
+        <Panel>
+          <SectionLabel>BADGES</SectionLabel>
+          <p className="mt-[6px] text-[13px] text-muted-foreground">
+            The full ladder. Home shows only the next one.
+          </p>
+          <div className="mt-[16px] grid grid-cols-3 gap-4">
+            {me.badges.map((b) => {
+              const pct = Math.round((b.progress.have / b.progress.need) * 100);
+              return (
+                <div
+                  key={b.id}
+                  className={`flex items-center gap-4 rounded-[16px] border border-border p-4 ${b.earned ? '' : 'opacity-70'}`}
+                >
+                  <BadgeArt id={b.id} size={48} className={b.earned ? 'shrink-0' : 'shrink-0 opacity-60'} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-medium text-foreground">{b.id}</p>
+                    <p className="mt-[4px] text-[13px] leading-[17px] text-muted-foreground">{b.requirement}</p>
+                    <div className="mt-[8px] h-[6px] overflow-hidden rounded-[3px] bg-secondary">
+                      <div className="h-[6px] rounded-[3px] bg-primary" style={{ width: `${Math.max(2, pct)}%` }} />
+                    </div>
+                    <p className="mt-[6px] font-mono text-[12px] text-muted-foreground">
+                      {b.earned ? 'earned' : `${b.progress.have} of ${b.progress.need}`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
+
       <Panel>
         <SectionLabel>STANDINGS</SectionLabel>
-        <p className="mt-[6px] text-[11px] leading-[14px] text-muted-foreground">
-          Ranked on each player&apos;s winsorised median (§7.2). A session count never moves anyone up.
-        </p>
+        {standings.length === 0 ? (
+          <EmptyState
+            illustration="insights"
+            title="No one has scored this month"
+            action={
+              <Button nativeButton={false} render={<Link href="/me" />}>
+                Connect your CLI
+              </Button>
+            }
+          >
+            The board fills up as soon as someone syncs a qualifying session.
+          </EmptyState>
+        ) : (
         <table className="mt-[16px] w-full table-fixed">
           <thead>
-            <tr className="border-b border-border text-left align-top [&>th]:pb-[9px] [&>th]:text-[10px] [&>th]:font-semibold [&>th]:leading-[13px] [&>th]:text-primary">
+            <tr className="border-b border-border text-left align-top [&>th]:pb-[9px] [&>th]:text-[12px] [&>th]:font-semibold [&>th]:leading-[16px] [&>th]:text-primary">
               <th className="w-[60px]">#</th>
               <th>PLAYER</th>
-              <th className="w-[220px]">SCORE</th>
-              <th className="w-[200px]">TIER</th>
+              <th className="w-[100px]">LEVEL</th>
+              <th className="w-[180px]">POINTS THIS MONTH</th>
               <th className="w-[140px]">SESSIONS</th>
               <th className="w-[100px]">STREAK</th>
             </tr>
           </thead>
           <tbody>
-            {standings.map((s, i) => {
-              const own = auth?.handle === s.handle;
-              const tone = own ? 'font-medium text-foreground' : 'text-muted-foreground';
-              return (
-                <tr key={s.handle} className={own ? 'bg-card' : undefined}>
-                  <td className={`rounded-l-[12px] py-[11px] font-mono text-[13px] ${tone}`}>{i + 1}</td>
-                  <td className={`py-[11px] text-[13px] ${tone}`}>
-                    <Link href={`/people/${s.handle}`} className="hover:underline">
-                      @{s.handle}
-                    </Link>
-                  </td>
-                  <td className={`py-[11px] font-mono text-[13px] ${tone}`}>{s.score.toFixed(3)}</td>
-                  <td className={`py-[11px] text-[13px] ${tone}`}>{s.tier ?? '—'}</td>
-                  <td className={`py-[11px] font-mono text-[13px] ${tone}`}>{s.sessionCount}</td>
-                  <td className={`rounded-r-[12px] py-[11px] font-mono text-[13px] ${tone}`}>{s.streak}</td>
-                </tr>
-              );
-            })}
-            {/* A ghost is a pace marker from a closed season. None exist until a
-                season closes out, so the row simply does not appear. */}
-            {(ghosts as { label?: string; score?: number; tier?: string }[]).map((g, i) => (
-              <tr key={`ghost-${i}`}>
-                <td className="py-[11px] font-mono text-[13px] text-muted-foreground">—</td>
-                <td className="py-[11px] text-[13px] text-muted-foreground">{g.label ?? 'ghost'}</td>
-                <td className="py-[11px] font-mono text-[13px] text-muted-foreground">
-                  {g.score?.toFixed(3) ?? '—'}
-                </td>
-                <td className="py-[11px] text-[13px] text-muted-foreground">{g.tier ?? '—'}</td>
-                <td className="py-[11px] font-mono text-[13px] text-muted-foreground">—</td>
-                <td className="py-[11px] font-mono text-[13px] text-muted-foreground">—</td>
-              </tr>
-            ))}
+            {(() => {
+              // Rank counts only qualified rows — standings is already sorted
+              // qualified-first (index.ts), so an unqualified player never
+              // occupies a rank number the way a real Nth place would.
+              let qualifiedRank = 0;
+              return standings.map((s) => {
+                const own = auth?.handle === s.handle;
+                const tone = own ? 'font-medium text-foreground' : 'text-muted-foreground';
+                if (s.qualified) qualifiedRank += 1;
+                return (
+                  // Same vocabulary as SessionTable's non-qualifying rows: greyed,
+                  // not hidden — the floor should be visible, not filtered away.
+                  <tr key={s.handle} className={own ? 'bg-card' : s.qualified ? undefined : 'opacity-60'}>
+                    <td className={`rounded-l-[12px] py-[11px] font-mono text-[15px] ${tone}`}>
+                      {s.qualified ? qualifiedRank : '—'}
+                    </td>
+                    <td className={`py-[11px] text-[15px] ${tone}`}>
+                      <Link href={`/people/${s.handle}`} className="hover:underline">
+                        @{s.handle}
+                      </Link>
+                    </td>
+                    <td className="py-[11px]">
+                      <LeagueArt tier={s.tier} size={28} />
+                    </td>
+                    <td className={`py-[11px] font-mono text-[15px] ${tone}`}>{s.monthPoints.toLocaleString('en-GB')}</td>
+                    <td className={`py-[11px] font-mono text-[15px] ${tone}`}>{s.sessionCount}</td>
+                    <td className={`rounded-r-[12px] py-[11px] font-mono text-[15px] ${tone}`}>{s.streak}</td>
+                  </tr>
+                );
+              });
+            })()}
           </tbody>
         </table>
-        <p className="mt-[22px] text-[11px] leading-[14px] text-muted-foreground">
-          Ghosts are a pace marker, not a player. They never occupy a rank.
-        </p>
-        <p className="mt-[10px] text-[11px] leading-[14px] text-muted-foreground">
-          Spec §7.2 — ranking is on a ratio. Totals, streaks and badges are shown but never ordered on.
-        </p>
+        )}
       </Panel>
     </div>
   );
