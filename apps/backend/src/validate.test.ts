@@ -7,6 +7,10 @@ import {
   validateProjectInput,
   validateSkillInput,
   validateChatInput,
+  validateVisibilityInput,
+  validateHiddenSkills,
+  validateRivalInput,
+  validateCommitCount,
 } from './validate.ts';
 
 const valid = {
@@ -44,6 +48,16 @@ test('accepts reworkRatio: null', () => {
   assert.equal(result.ok, true);
 });
 
+test('accepts source codex — the second agent, not just claude-code', () => {
+  const result = validateSessionMetric({ ...valid, source: 'codex' });
+  assert.equal(result.ok, true);
+});
+
+test('rejects an unknown source', () => {
+  const result = validateSessionMetric({ ...valid, source: 'cursor' });
+  assert.equal(result.ok, false);
+});
+
 test('rejects a non-UUID sessionId — must not be arbitrary free text', () => {
   const result = validateSessionMetric({ ...valid, sessionId: "'; DROP TABLE session_metrics; --" });
   assert.equal(result.ok, false);
@@ -77,6 +91,21 @@ test('accepts toolCounts: {} — a session with no tool calls', () => {
   assert.equal(result.ok, true);
 });
 
+test('accepts a skill: key — the colon is part of the identifier shape', () => {
+  const result = validateSessionMetric({ ...valid, toolCounts: { 'skill:caveman': 3, 'ponytail:ponytail': 1 } });
+  assert.equal(result.ok, true);
+});
+
+test('a real-sized key set is accepted — the cap must not silently drop sessions', () => {
+  const counts = Object.fromEntries(Array.from({ length: 80 }, (_, i) => [`tool${i}`, 1]));
+  assert.equal(validateSessionMetric({ ...valid, toolCounts: counts }).ok, true);
+});
+
+test('still rejects an unbounded bag of keys', () => {
+  const counts = Object.fromEntries(Array.from({ length: 241 }, (_, i) => [`tool${i}`, 1]));
+  assert.equal(validateSessionMetric({ ...valid, toolCounts: counts }).ok, false);
+});
+
 // --- Heartbeat (Path A: still numbers-only) ---------------------------------
 
 const beat = {
@@ -102,6 +131,36 @@ test('heartbeat rejects a free-text field — live status carries no content', (
 
 test('heartbeat rejects a raw path in place of projectHash', () => {
   assert.equal(validateHeartbeat({ ...beat, projectHash: '/Users/me/secret-project' }).ok, false);
+});
+
+test('heartbeat accepts source codex', () => {
+  assert.equal(validateHeartbeat({ ...beat, source: 'codex' }).ok, true);
+});
+
+// --- Commit counts (§7.4 season floor) --------------------------------------
+
+const AUG_1_2026_UTC = Date.UTC(2026, 7, 1);
+
+test('validateCommitCount accepts a UTC month start', () => {
+  const result = validateCommitCount({ monthStartMs: AUG_1_2026_UTC, commits: 7 });
+  assert.equal(result.ok, true);
+});
+
+test('validateCommitCount rejects a timestamp that is not a month boundary', () => {
+  const result = validateCommitCount({ monthStartMs: AUG_1_2026_UTC + 86_400_000, commits: 7 });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /month start/);
+});
+
+test('validateCommitCount rejects a negative commit count', () => {
+  const result = validateCommitCount({ monthStartMs: AUG_1_2026_UTC, commits: -1 });
+  assert.equal(result.ok, false);
+});
+
+test('validateCommitCount rejects an unknown field', () => {
+  const result = validateCommitCount({ monthStartMs: AUG_1_2026_UTC, commits: 7, repoUrl: 'https://x.com' });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /unexpected field/);
 });
 
 // --- Path B (authored content) ----------------------------------------------
@@ -218,4 +277,69 @@ test('chat flattens a newline flood into one line', () => {
   const result = validateChatInput({ body: 'top' + '\n'.repeat(200) + 'bottom' });
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.value.body, 'top bottom');
+});
+
+test('project logoUrl runs through the same http(s)-only allow-list as repoUrl', () => {
+  const ok = validateProjectInput({ name: 'kerf', logoUrl: 'https://cdn.example.com/logo.svg' });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.ok && ok.value.logoUrl, 'https://cdn.example.com/logo.svg');
+
+  const bad = validateProjectInput({ name: 'kerf', logoUrl: 'javascript:alert(1)' });
+  assert.equal(bad.ok, false);
+});
+
+// --- Visibility ---------------------------------------------------------------
+
+// The load-bearing one. `isPublic` defaults OPEN, unlike publicSkills above.
+// If this ever flips, every row that predates the column and every `kerf
+// projects publish` that omits the flag silently goes dark.
+test('project isPublic defaults to true when the field is absent', () => {
+  const result = validateProjectInput({ name: 'x' });
+  assert.equal(result.ok && result.value.isPublic, true);
+});
+
+test('skill isPublic defaults to true when the field is absent', () => {
+  const result = validateSkillInput({ name: 'x', content: 'body' });
+  assert.equal(result.ok && result.value.isPublic, true);
+});
+
+test('isPublic:false is honoured, and a non-boolean is rejected not coerced', () => {
+  const project = validateProjectInput({ name: 'x', isPublic: false });
+  assert.equal(project.ok && project.value.isPublic, false);
+  const skill = validateSkillInput({ name: 'x', content: 'body', isPublic: false });
+  assert.equal(skill.ok && skill.value.isPublic, false);
+  // 'false' is truthy — coercing it would publish a row the caller meant to hide.
+  assert.equal(validateProjectInput({ name: 'x', isPublic: 'false' }).ok, false);
+  assert.equal(validateSkillInput({ name: 'x', content: 'b', isPublic: 0 }).ok, false);
+});
+
+test('visibility input requires an explicit boolean', () => {
+  assert.equal(validateVisibilityInput({ isPublic: false }).ok, true);
+  assert.equal(validateVisibilityInput({}).ok, false);
+  assert.equal(validateVisibilityInput({ isPublic: true, name: 'x' }).ok, false);
+});
+
+test('validateRivalInput accepts an explicit boolean', () => {
+  assert.equal(validateRivalInput({ isRival: true }).ok, true);
+  assert.equal(validateRivalInput({ isRival: false }).ok, true);
+});
+
+test('validateRivalInput rejects a missing isRival', () => {
+  assert.equal(validateRivalInput({}).ok, false);
+});
+
+test('validateRivalInput rejects an unknown field', () => {
+  assert.equal(validateRivalInput({ isRival: true, handle: 'ada' }).ok, false);
+});
+
+test('hiddenSkills accepts skill:/mcp: keys, dedupes, and rejects builtin:', () => {
+  const ok = validateHiddenSkills({ hiddenSkills: ['skill:caveman', 'mcp:figma', 'skill:caveman'] });
+  assert.deepEqual(ok.ok && ok.value, ['skill:caveman', 'mcp:figma']);
+  // A builtin is already dropped from every public surface — hiding one is a
+  // no-op, so it fails rather than pretending to work.
+  assert.equal(validateHiddenSkills({ hiddenSkills: ['builtin:Bash'] }).ok, false);
+  assert.equal(validateHiddenSkills({ hiddenSkills: ['skill:has a space'] }).ok, false);
+  assert.equal(validateHiddenSkills({ hiddenSkills: 'skill:caveman' }).ok, false);
+  assert.equal(validateHiddenSkills({ hiddenSkills: [`skill:${'x'.repeat(81)}`] }).ok, false);
+  assert.equal(validateHiddenSkills({ hiddenSkills: Array.from({ length: 241 }, (_, i) => `skill:s${i}`) }).ok, false);
 });

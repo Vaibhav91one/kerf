@@ -2,8 +2,12 @@
 // code, not review. Any field not explicitly allowed here is rejected, not
 // stored — a stray free-text field must fail closed, never pass through.
 
-import type { Heartbeat, SessionMetric } from '@kerf/shared';
-import { LIMITS, cleanHandle, cleanMultilineText, cleanRepoUrl, cleanText } from '@kerf/shared';
+import type { AgentSource, Heartbeat, SessionMetric } from '@kerf/shared';
+import { AGENT_SOURCES, LIMITS, cleanHandle, cleanMultilineText, cleanRepoUrl, cleanText } from '@kerf/shared';
+
+function isAgentSource(v: unknown): v is AgentSource {
+  return typeof v === 'string' && (AGENT_SOURCES as readonly string[]).includes(v);
+}
 
 const ALLOWED_KEYS = new Set<keyof SessionMetric>([
   'source',
@@ -41,11 +45,18 @@ function isNonNegSafeInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 }
 
-// Tool/skill names (e.g. "Edit", "mcp__plugin_figma_figma__use_figma") — bounded
-// identifier shape, not free text. Key count capped so a payload can't smuggle
-// an unbounded bag of arbitrary strings through as "keys".
+// Tool/skill names (e.g. "Edit", "mcp__plugin_figma_figma__use_figma",
+// "skill:caveman") — bounded identifier shape, not free text. TOOL_NAME is the
+// privacy bound: it is what stops a key from being a sentence, and an unknown
+// top-level field still rejects the whole item.
+//
+// MAX_TOOL_COUNT_KEYS is a payload-SIZE bound, not a privacy one. It was 60,
+// which a real session already brushes (~52 distinct tool names before skill
+// attribution was added). Since this validator fails closed on the whole
+// metric, too tight a cap silently loses sessions — the opposite of what it is
+// for. 240 keys x 80 chars is still a bounded ~20KB.
 const TOOL_NAME = /^[A-Za-z0-9_.:-]{1,80}$/;
-const MAX_TOOL_COUNT_KEYS = 60;
+const MAX_TOOL_COUNT_KEYS = 240;
 
 function isToolCounts(v: unknown): v is Record<string, number> {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
@@ -63,7 +74,7 @@ export function validateSessionMetric(input: unknown): ValidationResult {
   const extraKeys = Object.keys(obj).filter((k) => !ALLOWED_KEYS.has(k as keyof SessionMetric));
   if (extraKeys.length > 0) return { ok: false, reason: `unexpected field(s): ${extraKeys.join(', ')}` };
 
-  if (obj.source !== 'claude-code') return { ok: false, reason: 'invalid source' };
+  if (!isAgentSource(obj.source)) return { ok: false, reason: 'invalid source' };
   if (!isUuid(obj.sessionId)) return { ok: false, reason: 'invalid sessionId' };
   if (!isSha256Hex(obj.projectHash)) return { ok: false, reason: 'invalid projectHash' };
   if (!isNonNegSafeInt(obj.startedMs)) return { ok: false, reason: 'invalid startedMs' };
@@ -106,7 +117,7 @@ export function validateHeartbeat(input: unknown): HeartbeatResult {
   const extraKeys = Object.keys(obj).filter((k) => !HEARTBEAT_KEYS.has(k as keyof Heartbeat));
   if (extraKeys.length > 0) return { ok: false, reason: `unexpected field(s): ${extraKeys.join(', ')}` };
 
-  if (obj.source !== 'claude-code') return { ok: false, reason: 'invalid source' };
+  if (!isAgentSource(obj.source)) return { ok: false, reason: 'invalid source' };
   if (!isUuid(obj.sessionId)) return { ok: false, reason: 'invalid sessionId' };
   if (!isSha256Hex(obj.projectHash)) return { ok: false, reason: 'invalid projectHash' };
   if (!isNonNegSafeInt(obj.startedMs)) return { ok: false, reason: 'invalid startedMs' };
@@ -116,6 +127,34 @@ export function validateHeartbeat(input: unknown): HeartbeatResult {
   if (!isNonNegInt(obj.editsRework)) return { ok: false, reason: 'invalid editsRework' };
 
   return { ok: true, value: obj as unknown as Heartbeat };
+}
+
+// --- Commit counts (Path A: a count and a month boundary, nothing else) -----
+// §7.4's season floor. The CLI recomputes the whole month's count locally
+// (apps/cli/src/git.ts) and uploads only the integer — see CommitCount's
+// schema comment for why this is a replace, never an increment.
+
+export type CommitCountInput = { monthStartMs: number; commits: number };
+export type CommitCountResult = { ok: true; value: CommitCountInput } | { ok: false; reason: string };
+
+const COMMIT_COUNT_KEYS = ['monthStartMs', 'commits'];
+
+export function validateCommitCount(input: unknown): CommitCountResult {
+  const walked = walk(input, COMMIT_COUNT_KEYS);
+  if (!walked.ok) return walked;
+  const obj = walked.obj;
+
+  if (!isNonNegSafeInt(obj.monthStartMs)) return { ok: false, reason: 'invalid monthStartMs' };
+  // Must be an EXACT UTC month start, not just any timestamp. A free value
+  // here would let a client shard its commits across arbitrary buckets to
+  // pick whichever one clears the floor.
+  const d = new Date(obj.monthStartMs);
+  if (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) !== obj.monthStartMs) {
+    return { ok: false, reason: 'monthStartMs is not a UTC month start' };
+  }
+  if (!isNonNegInt(obj.commits)) return { ok: false, reason: 'invalid commits' };
+
+  return { ok: true, value: { monthStartMs: obj.monthStartMs, commits: obj.commits } };
 }
 
 // --- Path B (authored content) ----------------------------------------------
@@ -210,13 +249,33 @@ export function validateProfileInput(input: unknown): ProfileResult {
   };
 }
 
-export type ProjectInput = { name: string; description: string | null; repoUrl: string | null; projectHash: string | null };
+export type ProjectInput = {
+  name: string;
+  description: string | null;
+  repoUrl: string | null;
+  logoUrl: string | null;
+  projectHash: string | null;
+  isPublic: boolean;
+};
 export type ProjectResult = { ok: true; value: ProjectInput } | { ok: false; reason: string };
 
+// `isPublic` defaults OPEN — `!== false`, deliberately NOT the `=== true` idiom
+// validateProfileInput uses for publicSkills a few lines up. That switch is
+// opt-in because nothing existed before it; this one is opt-OUT because rows and
+// CLI publishes that predate the field are already visible and must stay so.
+// Flip this to `=== true` and every legacy publish silently goes dark.
+function readIsPublic(obj: Record<string, unknown>): { ok: true; value: boolean } | { ok: false; reason: string } {
+  if (obj.isPublic != null && typeof obj.isPublic !== 'boolean') return { ok: false, reason: 'invalid isPublic' };
+  return { ok: true, value: obj.isPublic !== false };
+}
+
 export function validateProjectInput(input: unknown): ProjectResult {
-  const walked = walk(input, ['name', 'description', 'repoUrl', 'projectHash']);
+  const walked = walk(input, ['name', 'description', 'repoUrl', 'logoUrl', 'projectHash', 'isPublic']);
   if (!walked.ok) return walked;
   const { obj } = walked;
+
+  const isPublic = readIsPublic(obj);
+  if (!isPublic.ok) return isPublic;
 
   const name = cleanText(obj.name, LIMITS.projectName);
   if (!name) return { ok: false, reason: 'invalid name' };
@@ -233,24 +292,35 @@ export function validateProjectInput(input: unknown): ProjectResult {
     if (!repoUrl) return { ok: false, reason: 'invalid repoUrl' };
   }
 
+  // A logo is fetched by the browser, so it runs through the same http(s)-only
+  // allow-list a repo URL does — cleanRepoUrl is that check, not a repo-specific one.
+  let logoUrl: string | null = null;
+  if (obj.logoUrl != null && obj.logoUrl !== '') {
+    logoUrl = cleanRepoUrl(obj.logoUrl, LIMITS.logoUrl);
+    if (!logoUrl) return { ok: false, reason: 'invalid logoUrl' };
+  }
+
   let projectHash: string | null = null;
   if (obj.projectHash != null && obj.projectHash !== '') {
     if (!isSha256Hex(obj.projectHash)) return { ok: false, reason: 'invalid projectHash' };
     projectHash = obj.projectHash;
   }
 
-  return { ok: true, value: { name, description, repoUrl, projectHash } };
+  return { ok: true, value: { name, description, repoUrl, logoUrl, projectHash, isPublic: isPublic.value } };
 }
 
-export type SkillInput = { name: string; description: string | null; content: string };
+export type SkillInput = { name: string; description: string | null; content: string; isPublic: boolean };
 export type SkillResult = { ok: true; value: SkillInput } | { ok: false; reason: string };
 
 // `handle` and `slug` are deliberately not accepted here: handle comes from
 // the bearer token, slug is derived server-side from name (see index.ts).
 export function validateSkillInput(input: unknown): SkillResult {
-  const walked = walk(input, ['name', 'description', 'content']);
+  const walked = walk(input, ['name', 'description', 'content', 'isPublic']);
   if (!walked.ok) return walked;
   const { obj } = walked;
+
+  const isPublic = readIsPublic(obj);
+  if (!isPublic.ok) return isPublic;
 
   const name = cleanText(obj.name, LIMITS.skillName);
   if (!name) return { ok: false, reason: 'invalid name' };
@@ -264,7 +334,48 @@ export function validateSkillInput(input: unknown): SkillResult {
   const content = cleanMultilineText(obj.content, LIMITS.skillContent);
   if (!content) return { ok: false, reason: 'invalid content' };
 
-  return { ok: true, value: { name, description, content } };
+  return { ok: true, value: { name, description, content, isPublic: isPublic.value } };
+}
+
+// --- Visibility ---------------------------------------------------------------
+
+export type BoolResult = { ok: true; value: boolean } | { ok: false; reason: string };
+
+/** Body of both PATCH visibility routes. Required here — a flip must be explicit. */
+export function validateVisibilityInput(input: unknown): BoolResult {
+  const walked = walk(input, ['isPublic']);
+  if (!walked.ok) return walked;
+  if (typeof walked.obj.isPublic !== 'boolean') return { ok: false, reason: 'invalid isPublic' };
+  return { ok: true, value: walked.obj.isPublic };
+}
+
+/** Body of PATCH /api/follows/:handle. Required here too — a rival flip must be explicit. */
+export function validateRivalInput(input: unknown): BoolResult {
+  const walked = walk(input, ['isRival']);
+  if (!walked.ok) return walked;
+  if (typeof walked.obj.isRival !== 'boolean') return { ok: false, reason: 'invalid isRival' };
+  return { ok: true, value: walked.obj.isRival };
+}
+
+// A hide key is `${kind}:${label}` from classifyTool over the same TOOL_NAME
+// alphabet — an identifier, not free text. `builtin:` is rejected on purpose:
+// builtins are already dropped from every public surface, so hiding one is a
+// no-op the UI must not offer. Same 240 bound as MAX_TOOL_COUNT_KEYS, for the
+// same reason — it caps payload size, not information type.
+const HIDDEN_SKILL_KEY = /^(skill|mcp):[A-Za-z0-9_.:-]{1,80}$/;
+
+export type HiddenSkillsResult = { ok: true; value: string[] } | { ok: false; reason: string };
+
+export function validateHiddenSkills(input: unknown): HiddenSkillsResult {
+  const walked = walk(input, ['hiddenSkills']);
+  if (!walked.ok) return walked;
+  const list = walked.obj.hiddenSkills;
+  if (!Array.isArray(list)) return { ok: false, reason: 'invalid hiddenSkills' };
+  if (list.length > MAX_TOOL_COUNT_KEYS) return { ok: false, reason: 'too many hiddenSkills' };
+  for (const key of list) {
+    if (typeof key !== 'string' || !HIDDEN_SKILL_KEY.test(key)) return { ok: false, reason: 'invalid hiddenSkills' };
+  }
+  return { ok: true, value: [...new Set(list as string[])] };
 }
 
 export type ChatResult = { ok: true; value: { body: string } } | { ok: false; reason: string };

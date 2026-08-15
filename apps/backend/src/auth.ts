@@ -74,8 +74,41 @@ export async function bearerAuth(req: AuthedRequest, res: Response, next: NextFu
   res.status(401).json({ error: 'invalid token' });
 }
 
+/** The publishable key, under either name. Exported so index.ts installs the
+ *  middleware from exactly the value this module tests for. */
+export function clerkPublishableKey(): string | undefined {
+  return process.env.CLERK_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+}
+
+/**
+ * Clerk is usable only when BOTH keys are present, because that is the exact
+ * condition under which index.ts installs `clerkMiddleware`.
+ *
+ * Gating on the secret alone is the trap this replaces: with a secret and no
+ * publishable key the middleware is never installed, so `getAuth()` throws, the
+ * catch below swallows it, and a signed-in user is told "not signed in" — a
+ * config typo presenting as a user error, identically on every request, forever.
+ * One key missing now answers 503 "clerk not configured", which is true.
+ */
+export function clerkConfigured(): boolean {
+  return Boolean(process.env.CLERK_SECRET_KEY && clerkPublishableKey());
+}
+
+/**
+ * Origins Clerk will accept a session token as issued for. Without this, any
+ * site holding a valid Clerk session JWT for this instance — not just our own
+ * frontend — can present it here and clerkMiddleware will accept it; a wildcard
+ * CORS origin (index.ts) makes that a real reachable path, not a theoretical
+ * one. Comma-separated, e.g. "https://kerf.example.com,https://staging.kerf.example.com".
+ */
+export function clerkAuthorizedParties(): string[] | undefined {
+  const raw = process.env.CLERK_AUTHORIZED_PARTIES;
+  if (!raw) return undefined;
+  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
 export function getClerkUserId(req: Request): string | null {
-  if (!process.env.CLERK_SECRET_KEY) return null;
+  if (!clerkConfigured()) return null;
   try {
     const auth = getAuth(req);
     return auth.isAuthenticated ? auth.userId : null;
@@ -88,8 +121,9 @@ export function getClerkUserId(req: Request): string | null {
 export function clerkAuth(req: AuthedRequest, res: Response, next: NextFunction): void {
   const clerkUserId = getClerkUserId(req);
   if (!clerkUserId) {
-    res.status(process.env.CLERK_SECRET_KEY ? 401 : 503).json({
-      error: process.env.CLERK_SECRET_KEY ? 'not signed in' : 'clerk not configured',
+    const configured = clerkConfigured();
+    res.status(configured ? 401 : 503).json({
+      error: configured ? 'not signed in' : 'clerk not configured',
     });
     return;
   }
