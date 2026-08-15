@@ -1,10 +1,10 @@
 // Claude Code transcript extractor — kerf-spec.md §5.1.
 //
-// ponytail: subagent transcripts (`<session>/subagents/*.jsonl`) are not
-// recursed tonight. Rework ratio is computed from main-session Edit/Write
-// calls only. Add subagent recursion when tokens-per-session ships (needs
-// the same recursion per §5.1's "read the parent's totalTokens, never both"
-// rule anyway).
+// Subagent transcripts (`<session-uuid>/subagents/agent-*.jsonl`) ARE
+// recursed: their records carry the PARENT's sessionId, so extractAll's
+// bySession keying below merges them with no id remapping needed. A session
+// that delegated all its edits to a subagent used to score near zero — the
+// main-session-only rule this comment used to describe was exactly that bug.
 
 import { createReadStream, existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
@@ -12,7 +12,7 @@ import { createInterface } from 'node:readline';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { KerfEvent, EventKind } from '@kerf/shared';
+import { EDIT_TOOLS, type KerfEvent, type EventKind } from '@kerf/shared';
 
 // ponytail: default profile only — user has other .claude-* profile dirs
 // (personal/work/qwen) on this machine, deliberately excluded tonight.
@@ -22,9 +22,9 @@ function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex');
 }
 
-export async function listSessionFiles(): Promise<string[]> {
+export async function listSessionFiles(roots: string[] = ROOTS): Promise<string[]> {
   const files: string[] = [];
-  for (const root of ROOTS) {
+  for (const root of roots) {
     if (!existsSync(root)) continue;
     const projectDirs = await readdir(root, { withFileTypes: true });
     for (const dir of projectDirs) {
@@ -34,6 +34,15 @@ export async function listSessionFiles(): Promise<string[]> {
       for (const entry of entries) {
         if (entry.isFile() && entry.name.endsWith('.jsonl')) {
           files.push(join(projectPath, entry.name));
+          continue;
+        }
+        if (!entry.isDirectory()) continue;
+        // <session-uuid>/subagents/agent-<hex>.jsonl — the delegated half of
+        // a session. Its records carry the PARENT's sessionId.
+        const subDir = join(projectPath, entry.name, 'subagents');
+        if (!existsSync(subDir)) continue;
+        for (const sub of await readdir(subDir)) {
+          if (sub.endsWith('.jsonl')) files.push(join(subDir, sub));
         }
       }
     }
@@ -41,13 +50,26 @@ export async function listSessionFiles(): Promise<string[]> {
   return files;
 }
 
-const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
+// Which skill drove a turn. Claude Code stamps this on the assistant record
+// itself (`attributionSkill`), so it also catches skills entered by slash
+// command, which never produce a `Skill` tool_use block at all.
+//
+// §6: the slug is an enum-ish identifier and is the ONLY thing read. A `Skill`
+// block's `input.args` and a transcript's `<command-args>` are free text and
+// are never touched. This regex mirrors the backend's TOOL_NAME (minus the
+// "skill:" prefix we add) so a malformed slug is dropped here rather than
+// failing the whole session's upload closed at the validator.
+const SKILL_SLUG = /^[A-Za-z0-9_.:-]{1,72}$/;
 
-// Real schema has no `origin.kind` field (checked against live transcripts,
-// 2026-08). A human turn is a `type=="user"` record whose content contains
-// no `tool_result` block — that's the agentic-loop feedback, not a person typing.
+// `origin.kind` is now common on real transcripts (values seen: "human",
+// "task-notification", "coordinator") — verified directly against a real
+// corpus, and it is authoritative when present, so it is the primary signal.
+// The content heuristic below is the fallback for older transcripts that
+// predate the field: a `type=="user"` record whose content contains no
+// `tool_result` block — that's the agentic-loop feedback, not a person typing.
 function isHumanTurn(record: any): boolean {
   if (record.type !== 'user') return false;
+  if (typeof record.origin?.kind === 'string') return record.origin.kind === 'human';
   const content = record.message?.content;
   if (typeof content === 'string') return true;
   if (!Array.isArray(content)) return true;
@@ -81,7 +103,13 @@ export async function parseSessionFile(path: string): Promise<KerfEvent[]> {
     if (record.cwd && !projectHash) projectHash = sha256(record.cwd);
     const ts = Date.parse(record.timestamp ?? '') || 0;
 
-    if (type === 'user' && isHumanTurn(record)) {
+    // isSidechain marks every subagent record. A subagent's `type:'user'`
+    // records are the harness feeding its agent, not a person typing — without
+    // this guard, turns inflates by one per delegated step and the focus term
+    // (packages/shared/src/points.ts) collapses toward zero. Assistant/
+    // tool_use records below are deliberately NOT guarded: counting a
+    // subagent's edits is the entire point of recursing into it.
+    if (type === 'user' && record.isSidechain !== true && isHumanTurn(record)) {
       events.push({
         source: 'claude-code',
         sessionId,
@@ -96,8 +124,10 @@ export async function parseSessionFile(path: string): Promise<KerfEvent[]> {
     if (type === 'assistant') {
       const content = record.message?.content;
       if (!Array.isArray(content)) continue;
+      let toolCalls = 0;
       for (const block of content) {
         if (block?.type !== 'tool_use') continue;
+        toolCalls += 1;
         const isEdit = EDIT_TOOLS.has(block.name);
         events.push({
           source: 'claude-code',
@@ -108,6 +138,23 @@ export async function parseSessionFile(path: string): Promise<KerfEvent[]> {
           kind: 'tool_call' as EventKind,
           tool: block.name,
           filePath: isEdit ? block.input?.file_path : undefined,
+        });
+      }
+
+      // One event per record, not per block: a "use" of a skill is a turn it
+      // drove, so a record with three tool calls is still one use. Records with
+      // no tool call are skipped — a skill that did nothing measurable should
+      // not outweigh the tools it would have used.
+      const skill = record.attributionSkill;
+      if (toolCalls > 0 && typeof skill === 'string' && SKILL_SLUG.test(skill)) {
+        events.push({
+          source: 'claude-code',
+          sessionId,
+          projectHash,
+          ts,
+          ordinal: ordinal++,
+          kind: 'tool_call' as EventKind,
+          tool: `skill:${skill}`,
         });
       }
     }
