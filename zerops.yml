@@ -59,11 +59,17 @@ zerops:
         # — the literal unresolved string, not a real origin) — same fix,
         # a differently-named service-level secret.
         CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES_VALUE}
-        # Optional. Without it the GitHub proxy uses the anonymous 60 req/hr/IP
-        # budget, which the 10-minute cache makes workable; with it, 5000/hr.
-        # Runtime only — putting a secret in build.envVariables bakes it into
-        # the build log.
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
+        # Optional and currently OMITTED rather than wired: same same-name
+        # self-reference bug as the two Clerk vars above, verified live —
+        # process.env.GITHUB_TOKEN resolved to the literal string
+        # "${GITHUB_TOKEN}", which the proxy then sent to GitHub as
+        # `Authorization: Bearer ${GITHUB_TOKEN}`, an invalid credential that
+        # made every /api/projects/:id/github call fail with 502 even though
+        # the anonymous, unauthenticated request works fine. A broken token is
+        # worse than no token, so this is left unset until wired as a
+        # differently-named service-level secret (GITHUB_TOKEN_VALUE, say) —
+        # without it the proxy uses the anonymous 60 req/hr/IP budget, which
+        # the 10-minute cache makes workable; with a real one, 5000/hr.
       start: sh -c 'cd apps/backend && pnpm run prisma:deploy && pnpm start'
       # /health does a SELECT 1, so this withholds traffic from a container
       # whose `prisma migrate deploy` is still running or whose database is
