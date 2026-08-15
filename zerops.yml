@@ -32,23 +32,22 @@ zerops:
         # what makes a 500 say "Internal Server Error" instead.
         NODE_ENV: production
         DATABASE_URL: ${postgresql_connectionString}/${postgresql_dbName}
-        # Pulled from the project environment. Dropping this line moved the
-        # backend to a service-level secret that is not actually wired, and the
-        # running process came up without a Clerk secret at all — `clerkAuth`
-        # then answers 503 "clerk not configured" and every sign-in path dies,
-        # including claiming a handle and `kerf login`.
-        CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
-        # NOT secret — a Clerk publishable key is meant to ship in client-side
-        # JS. Hardcoded deliberately: unlike CLERK_SECRET_KEY there is no
-        # project-env variable of this name actually wired in Zerops, and a
-        # ${CLERK_PUBLISHABLE_KEY} reference here resolves to empty at
-        # runtime — clerkMiddleware() then throws "Publishable key not valid"
-        # on every request, not just auth ones (verified live: this broke
-        # /api/season/current and /api/skills too). This is a Clerk
-        # DEVELOPMENT instance key, capped at ~100 users with no production
-        # origin allow-list; swap to a PRODUCTION instance's key (alongside
-        # CLERK_SECRET_KEY) before this serves real users.
-        CLERK_PUBLISHABLE_KEY: pk_test_c2tpbGxlZC1qYWd1YXItNTkuY2xlcmsuYWNjb3VudHMuZGV2JA
+        # References a SERVICE-LEVEL secret (backend service's own "Secret
+        # variables"), not the project-level CLERK_SECRET_KEY. The project-
+        # level var of the SAME name silently never resolved correctly at
+        # runtime — process.env.CLERK_SECRET_KEY inside the container kept
+        # hashing to a stale value no matter how many times the project var
+        # was edited/saved or the service redeployed (verified directly via
+        # the container's web terminal). A same-named self-reference
+        # (`CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}`) is the likely cause; a
+        # differently-named service-level secret sidesteps it entirely.
+        CLERK_SECRET_KEY: ${CLERK_SECRET_KEY_VALUE}
+        # Production Clerk instance (kerf.vaibhav.quest) — real Google OAuth
+        # credentials (Kerf project, kerf-505614, App Auth Platform, published
+        # to production — non-sensitive scopes only, no Google verification
+        # required), DNS verified via Vercel Domain Connect. Not secret —
+        # a publishable key is meant to ship in client-side JS.
+        CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsua2VyZi52YWliaGF2LnF1ZXN0JA
         # Comma-separated origins Clerk will accept a session token as issued
         # for — see auth.ts's clerkAuthorizedParties(). Without this, a Clerk
         # session JWT valid for this instance is accepted here regardless of
@@ -90,7 +89,7 @@ zerops:
         NEXT_PUBLIC_SITE_URL: https://kerf.vaibhav.quest
         # Same key as the backend's CLERK_PUBLISHABLE_KEY above — see that
         # comment for why this is hardcoded rather than a project-env ref.
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_c2tpbGxlZC1qYWd1YXItNTkuY2xlcmsuYWNjb3VudHMuZGV2JA
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsua2VyZi52YWliaGF2LnF1ZXN0JA
     run:
       base: nodejs@22
       ports:
@@ -99,5 +98,5 @@ zerops:
       envVariables:
         # Same key as the backend's CLERK_PUBLISHABLE_KEY above — see that
         # comment for why this is hardcoded rather than a project-env ref.
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_c2tpbGxlZC1qYWd1YXItNTkuY2xlcmsuYWNjb3VudHMuZGV2JA
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsua2VyZi52YWliaGF2LnF1ZXN0JA
       start: sh -c 'cd apps/frontend && pnpm start'
