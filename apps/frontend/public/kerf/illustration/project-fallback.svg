@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" fill="none">
+<g id="Kerf/Asset/Illustration/Project Fallback">
+<rect id="Sheet" x="56" y="16" width="208" height="132" rx="16" fill="#F6FFF4"/>
+<rect id="Sheet line long" x="80" y="48" width="140" height="10" rx="5" fill="#D8DED4"/>
+<rect id="Sheet line short" x="80" y="82" width="96" height="10" rx="5" fill="#D8DED4"/>
+<path id="Folder tab" d="M8 44C8 36.268 14.268 30 22 30H126C133.732 30 140 36.268 140 44V76H8V44Z" fill="#265A3B"/>
+<rect id="Folder body" x="8" y="66" width="304" height="166" rx="24" fill="#18221B"/>
+<path id="Spine" d="M78 100V208" stroke="#39473D" stroke-width="10" stroke-linecap="round"/>
+<path id="Branch" d="M78 130C78 146 100 152 138 152C168 152 176 152 176 152M78 190C78 174 100 152 138 152" stroke="#39473D" stroke-width="10" stroke-linecap="round"/>
+<path id="Commit" d="M78 126C84.627 126 90 131.373 90 138C90 144.627 84.627 150 78 150C71.373 150 66 144.627 66 138C66 131.373 71.373 126 78 126Z" fill="#72E06A"/>
+<path id="Commit tail" d="M78 190C84.627 190 90 195.373 90 202C90 208.627 84.627 214 78 214C71.373 214 66 208.627 66 202C66 195.373 71.373 190 78 190Z" fill="#72E06A"/>
+<path id="Branch tip" d="M176 141C182.075 141 187 145.925 187 152C187 158.075 182.075 163 176 163C169.925 163 165 158.075 165 152C165 145.925 169.925 141 176 141Z" fill="#3FBF73"/>
+<path id="HEAD" d="M78 87C85.18 87 91 92.82 91 100C91 107.18 85.18 113 78 113C70.82 113 65 107.18 65 100C65 92.82 70.82 87 78 87Z" fill="#FBBF24"/>
+</g>
+</svg>

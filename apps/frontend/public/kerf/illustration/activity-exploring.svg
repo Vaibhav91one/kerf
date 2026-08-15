@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" fill="none">
+<g id="Kerf/Asset/Illustration/Activity Exploring">
+<path id="Case" d="M160 48C199.765 48 232 80.2355 232 120C232 159.765 199.765 192 160 192C120.235 192 88 159.765 88 120C88 80.2355 120.235 48 160 48Z" fill="#39473D"/>
+<path id="Dial" d="M160 72C186.51 72 208 93.4903 208 120C208 146.51 186.51 168 160 168C133.49 168 112 146.51 112 120C112 93.4903 133.49 72 160 72Z" fill="#F6FFF4"/>
+<path id="Needle north" d="M160 84L182 122L160 114V84Z" fill="#FF3B6B"/>
+<path id="Needle south" d="M160 156L138 118L160 126V156Z" fill="#D8DED4"/>
+<path id="Pivot" d="M160 114C163.314 114 166 116.686 166 120C166 123.314 163.314 126 160 126C156.686 126 154 123.314 154 120C154 116.686 156.686 114 160 114Z" fill="#18221B"/>
+<path id="Marks" d="M160 40V56M160 184V200M80 120H96M224 120H240" stroke="#FBBF24" stroke-width="8" stroke-linecap="round"/>
+</g>
+</svg>

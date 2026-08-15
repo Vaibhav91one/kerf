@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" fill="none">
+<g id="Kerf/Asset/Illustration/Activity Reading">
+<rect id="Page back" x="86" y="52" width="118" height="146" rx="12" fill="#D8DED4"/>
+<rect id="Page front" x="110" y="42" width="124" height="156" rx="12" fill="#F6FFF4" stroke="#18221B" stroke-width="6"/>
+<path id="Line one" d="M134 80H210" stroke="#39473D" stroke-width="8" stroke-linecap="round"/>
+<path id="Line two" d="M134 108H210" stroke="#D8DED4" stroke-width="8" stroke-linecap="round"/>
+<path id="Line three" d="M134 136H186" stroke="#D8DED4" stroke-width="8" stroke-linecap="round"/>
+<path id="Line read" d="M134 164H196" stroke="#72E06A" stroke-width="8" stroke-linecap="round"/>
+</g>
+</svg>

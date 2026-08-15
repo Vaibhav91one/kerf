@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" fill="none">
+<g id="Kerf/Asset/Illustration/Skill Spotlight">
+<path id="Beam" d="M160 40L272 216H48L160 40Z" fill="#39473D"/>
+<rect id="Card" x="72" y="128" width="176" height="88" rx="18" fill="#18221B"/>
+<rect id="Card line long" x="96" y="154" width="104" height="10" rx="5" fill="#D8DED4"/>
+<rect id="Card line short" x="96" y="180" width="64" height="10" rx="5" fill="#3FBF73"/>
+<path id="Star" d="M160 24L173 58L209 60L181 83L190 118L160 98L130 118L139 83L111 60L147 58L160 24Z" fill="#FBBF24"/>
+<path id="Spark left" d="M64 74L74 92M52 122H72" stroke="#72E06A" stroke-width="10" stroke-linecap="round"/>
+<path id="Spark right" d="M256 74L246 92M268 122H248" stroke="#72E06A" stroke-width="10" stroke-linecap="round"/>
+</g>
+</svg>

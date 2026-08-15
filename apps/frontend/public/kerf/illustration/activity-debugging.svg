@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" fill="none">
+<g id="Kerf/Asset/Illustration/Activity Debugging">
+<path id="Legs" d="M96 104L60 88M96 132H56M96 160L60 178M204 104L240 88M204 132H244M204 160L240 178" stroke="#18221B" stroke-width="8" stroke-linecap="round"/>
+<path id="Body" d="M150 76C176.51 76 198 100.176 198 130C198 159.823 176.51 184 150 184C123.49 184 102 159.823 102 130C102 100.176 123.49 76 150 76Z" fill="#39473D"/>
+<path id="Spine" d="M150 88V172" stroke="#72E06A" stroke-width="8" stroke-linecap="round"/>
+<path id="Antenna" d="M132 68L142 84M168 68L158 84" stroke="#18221B" stroke-width="8" stroke-linecap="round"/>
+<path id="Lens" d="M216 66C233.673 66 248 80.3269 248 98C248 115.673 233.673 130 216 130C198.327 130 184 115.673 184 98C184 80.3269 198.327 66 216 66Z" stroke="#FBBF24" stroke-width="10"/>
+<path id="Grip" d="M240 122L266 148" stroke="#FBBF24" stroke-width="12" stroke-linecap="round"/>
+</g>
+</svg>

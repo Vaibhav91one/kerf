@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" fill="none">
+<g id="Kerf/Asset/Illustration/Activity Building">
+<path id="Hoist line" d="M160 34V66" stroke="#18221B" stroke-width="8" stroke-linecap="round"/>
+<path id="Hook" d="M160 82C168.837 82 176 74.8366 176 66C176 57.1634 168.837 50 160 50C151.163 50 144 57.1634 144 66C144 74.8366 151.163 82 160 82Z" fill="#FBBF24"/>
+<rect id="Block base" x="96" y="152" width="128" height="44" rx="10" fill="#39473D"/>
+<rect id="Block mid" x="108" y="106" width="104" height="44" rx="10" fill="#3FBF73"/>
+<rect id="Block top" x="126" y="88" width="68" height="34" rx="10" fill="#72E06A"/>
+<path id="Ground" d="M72 204H248" stroke="#D8DED4" stroke-width="8" stroke-linecap="round"/>
+</g>
+</svg>
