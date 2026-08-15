@@ -131,7 +131,10 @@ export default function HomePage() {
         </Panel>
       )}
 
-      <div className="grid grid-cols-2 items-start gap-5">
+      {/* No items-start: default grid stretch is what keeps these two equal
+          height regardless of which has more content, same as every other
+          two-panel row in the app (live, projects, season). */}
+      <div className="grid grid-cols-2 gap-5">
         <SkillOfTheDay skill={skills.skillOfTheDay} />
         <TrendingSkills skills={skills.skills} />
       </div>
