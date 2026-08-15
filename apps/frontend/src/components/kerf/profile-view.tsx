@@ -149,7 +149,7 @@ export function SkillsUsedPanel({
   return (
     <Panel className="min-h-[420px]">
       <SectionLabel>{isOwn ? 'SKILLS YOU USE' : 'SKILLS THEY USE'}</SectionLabel>
-      <div className="mt-[22px]">
+      <div className="mt-[22px] max-h-[520px] overflow-y-auto pr-1">
         {rows.map(([name, count]) => (
           // No `kind`: /api/profiles/:handle discards it, and the sheet degrades
           // without one. The count is passed because the row just drew it —

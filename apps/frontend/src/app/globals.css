@@ -195,4 +195,9 @@
   html {
     @apply font-sans;
   }
+  /* Tailwind v4 dropped Preflight's button cursor reset, so native/shadcn
+     buttons show the arrow cursor instead of a pointer unless disabled. */
+  button:not(:disabled) {
+    cursor: pointer;
+  }
 }
