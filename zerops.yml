@@ -84,9 +84,10 @@ zerops:
       envVariables:
         COREPACK_NPM_REGISTRY: https://registry.npmmirror.com
         NEXT_PUBLIC_API_URL: https://backend-2cf9-3000.prg1.zerops.app
-        # Used by robots.ts/sitemap.ts to build absolute URLs. Update this
-        # alongside C1's real production domain when that lands.
-        NEXT_PUBLIC_SITE_URL: https://frontend-2cf9-3000.prg1.zerops.app
+        # Used by robots.ts/sitemap.ts to build absolute URLs. kerf.vaibhav.quest
+        # is the real domain (CNAME on Vercel DNS -> Zerops, custom domain
+        # added on the frontend service in the Zerops GUI, SSL auto-issued).
+        NEXT_PUBLIC_SITE_URL: https://kerf.vaibhav.quest
         # Same key as the backend's CLERK_PUBLISHABLE_KEY above — see that
         # comment for why this is hardcoded rather than a project-env ref.
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_c2tpbGxlZC1qYWd1YXItNTkuY2xlcmsuYWNjb3VudHMuZGV2JA

@@ -1086,3 +1086,17 @@ Three reusable pieces, because these were about to be written inline for the thi
 - **CLI STATUS art** — was a 93px `cli-sync` pinned to the corner with `absolute right-[19px]`, which
   looked stranded once that panel went full-width. It is a real 34% column now, same shape as the
   project card.
+
+### Real domain: kerf.vaibhav.quest
+
+Added on the frontend service's routing settings (Zerops GUI — `zcli` has no custom-domain command):
+CNAME, published, target `qs0qce427n9cibbuoffnuvn7io0.prg1-zerops.zone`. `vaibhav.quest` lives on
+Vercel's own registrar + nameservers, so the matching CNAME record (`kerf` -> that target) was added
+there — resolved on the first `dig` check, no propagation wait needed. SSL auto-issued by Zerops
+(Let's Encrypt). `zerops.yml`'s `NEXT_PUBLIC_SITE_URL` updated to `https://kerf.vaibhav.quest`
+(build-time, used by `robots.ts`/`sitemap.ts`) and the frontend redeployed to pick it up. The backend
+keeps its Zerops-assigned URL — not user-facing, no reason to move it. Backend CORS is already `*`
+(bearer-token auth, no cookies, so a new frontend origin needs no change there), and
+`CLERK_AUTHORIZED_PARTIES` is still unset (Clerk stays permissive on origin for now, same
+DEVELOPMENT-instance gap already tracked in `CLAUDE.md`) — tightening that to the real domain is a
+follow-up, not required for the domain itself to work.
