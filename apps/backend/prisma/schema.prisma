@@ -1,10 +1,10 @@
 // Kerf backend schema — kerf-spec.md §9, trimmed to tonight's scope.
 //
-// ponytail: no persisted `season` table tonight. Tier cuts are computed live
-// from qualifying session_metrics rows in GET /api/season/current via
-// @kerf/shared's tierCuts(). Add a persisted, closed-out Season row when a
-// season needs to survive past its own month (cron close-out, historical
-// ghosts) — see spec §7.6 and §9.
+// ponytail: no persisted `season` table tonight. Points and levels are computed
+// live from session_metrics rows in GET /api/season/current via @kerf/shared's
+// points.ts. Add a persisted, closed-out Season row when a season needs to
+// survive past its own month (cron close-out, historical ghosts) — see spec
+// §7.6 and §9.
 //
 // No `event` table by design: raw events never leave the user's machine
 // (privacy invariant, spec §6). The server only ever sees a SessionMetric.
@@ -42,6 +42,9 @@ model SessionMetric {
   @@id([handle, sessionId])
   @@index([qualifies, startedMs])
   @@index([handle, startedMs])
+  // GET /api/projects/:id filters on exactly this pair (session count for one
+  // project's hash) — was a sequential scan of the handle's whole row set.
+  @@index([handle, projectHash])
   @@map("session_metrics")
 }
 
@@ -62,6 +65,12 @@ model Profile {
   // Opt-in: skill names are §6-safe to store, which is a different question
   // from being safe to show strangers. Default off.
   publicSkills Boolean @default(false) @map("public_skills")
+  // Per-skill overrides under the master switch above. Keys are `${kind}:${label}`
+  // from classifyTool — the same key GET /api/skills aggregates on. Hidden means
+  // hidden from EVERYONE, aggregates included, so the public counts stay
+  // globally consistent instead of varying per viewer. The owner still sees them
+  // on /me via the owner-scoped /api/me/sessions.
+  hiddenSkills String[] @default([]) @map("hidden_skills")
   // Optional, all http(s)-only (packages/shared/src/social.ts cleanRepoUrl).
   avatarUrl   String?  @map("avatar_url")
   websiteUrl  String?  @map("website_url")
@@ -79,6 +88,9 @@ model Profile {
   skills     Skill[]
   skillStars SkillStar[]
   apiTokens  ApiToken[]
+  following  Follow[] @relation("FollowsOut")
+  followers  Follow[] @relation("FollowsIn")
+  commitCounts CommitCount[]
 
   @@map("profiles")
 }
@@ -106,17 +118,28 @@ model ApiToken {
 model Skill {
   id           String   @id @default(uuid())
   handle       String
+  // ponytail: globally unique, not @@unique([handle, slug]). Scoping it per
+  // handle would break `kerf skill install <slug>`, the by-slug route and the
+  // sheet's label->slug join, all of which address a skill by slug alone. The
+  // cost is a one-bit "this slug is taken" oracle across a private row, which is
+  // accepted; @@unique([handle, slug]) plus a handle-qualified install path is
+  // the upgrade.
   slug         String   @unique
   name         String
   description  String?
   content      String
   installCount Int      @default(0) @map("install_count")
+  // Published, but not necessarily public — see Project.isPublic.
+  isPublic     Boolean  @default(true) @map("is_public")
   createdAt    DateTime @default(now()) @map("created_at")
 
   owner Profile     @relation(fields: [handle], references: [handle], onDelete: Cascade)
   stars SkillStar[]
 
   @@index([handle])
+  // GET /api/skill-library (anonymous) filters isPublic then sorts createdAt —
+  // same shape as Project's, same fix.
+  @@index([isPublic, createdAt])
   @@map("skills_library")
 }
 
@@ -128,7 +151,64 @@ model SkillStar {
   owner Profile @relation(fields: [handle], references: [handle], onDelete: Cascade)
 
   @@id([skillId, handle])
+  // "which skills has X starred" (GET /api/skill-library) filters on handle,
+  // the SECOND column of the composite PK — that index can't serve it as a
+  // prefix, so this was a sequential scan of the whole table.
+  @@index([handle])
   @@map("skill_stars")
+}
+
+// Asymmetric, unlimited follow — plus a rival flag on the same row, since a
+// rival is by definition someone you already follow. One table instead of
+// two: a separate Rival table would need its own FK back to this one just to
+// say so.
+//
+// Fully public, no visibility flag: GET /api/profiles already serves every
+// profile unconditionally, a follow edge carries zero free text, and
+// visibleTo() can't express a two-owner row anyway. GET /api/me/follows is
+// owner-scoped because it's a CONTROL surface (only you can unfollow through
+// it), not because the data itself is secret.
+model Follow {
+  followerHandle String  @map("follower_handle")
+  followeeHandle String  @map("followee_handle")
+  isRival        Boolean @default(false) @map("is_rival")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Named relations required: both sides point at Profile, so Prisma cannot
+  // infer which FK is which without them (SkillStar dodges this by pointing
+  // at two different models).
+  follower Profile @relation("FollowsOut", fields: [followerHandle], references: [handle], onDelete: Cascade)
+  followee Profile @relation("FollowsIn", fields: [followeeHandle], references: [handle], onDelete: Cascade)
+
+  @@id([followerHandle, followeeHandle])
+  // "who follows me" (follower count, follower lists) filters on the SECOND
+  // column of the composite PK — same shape as skill_stars above, same fix.
+  @@index([followeeHandle])
+  @@map("follows")
+}
+
+// §7.4's season commit floor. One row per player per UTC month — the CLI
+// recomputes the whole count locally (apps/cli/src/git.ts) and this row is
+// REPLACED on every upload, never incremented; see git.ts's header for why
+// that is what makes re-running `kerf sync` safe.
+//
+// Path A, not Path B: a count and a month boundary, nothing else. The commit
+// hashes, repo paths, author emails and messages that produced this number
+// never leave the machine — the CLI counts locally and uploads only the
+// integer (§6).
+model CommitCount {
+  handle       String
+  monthStartMs BigInt   @map("month_start_ms")
+  commits      Int      @default(0)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  owner Profile @relation(fields: [handle], references: [handle], onDelete: Cascade)
+
+  @@id([handle, monthStartMs])
+  // The season board reads one month across every player.
+  @@index([monthStartMs])
+  @@map("commit_counts")
 }
 
 model Project {
@@ -137,14 +217,27 @@ model Project {
   name        String
   description String?
   repoUrl     String?  @map("repo_url")
+  logoUrl     String?  @map("logo_url")
   // Optional bridge to the telemetry side: a derived hash, associated with an
   // authored name only because the person who owns both said so.
   projectHash String?  @map("project_hash")
+  // DEFAULT true IS the backfill: every row that predates this column, and every
+  // CLI publish that omits the flag, stays visible. Private is opt-in — see
+  // validate.ts's `!== false`, which is the other half of that promise.
+  // A private row is ABSENT from every public read (src/visibility.ts), never
+  // blanked, so there is no 200-vs-404 existence oracle.
+  isPublic    Boolean  @default(true) @map("is_public")
   createdAt   DateTime @default(now()) @map("created_at")
 
   owner Profile @relation(fields: [handle], references: [handle], onDelete: Cascade)
 
+  // ponytail: no @@index([handle, is_public]). /api/projects takes ≤100 rows and
+  // both tables already index handle; add the composite when the row count makes
+  // the filter cost visible.
   @@index([handle])
+  // GET /api/projects (anonymous) filters isPublic then sorts createdAt —
+  // exactly this shape, and the query that runs on every anonymous page load.
+  @@index([isPublic, createdAt])
   @@map("projects")
 }
 
@@ -178,5 +271,8 @@ model LiveSession {
 
   @@id([handle, sessionId])
   @@index([lastBeatMs])
+  // GET /api/projects/:id filters on exactly this (live sessions for one
+  // project), unindexed before this.
+  @@index([projectId])
   @@map("live_sessions")
 }
