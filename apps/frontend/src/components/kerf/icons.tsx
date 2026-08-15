@@ -80,6 +80,19 @@ export function ProjectsIcon({ size = 24, className }: IconProps) {
   );
 }
 
+// No Figma asset for this one (Rivals is new, not in the comps) — a plain
+// pair of chevrons meeting head-on, same solid-fill/24x24 convention as the
+// rest of this file, rather than reaching for a differently-styled icon set.
+export function RivalsIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <g>
+<path d="M4 4L11 11L4 18L2.5 16.5L8 11L2.5 5.5L4 4Z M20 4L13 11L20 18L21.5 16.5L16 11L21.5 5.5L20 4Z" fill="currentColor"/>
+</g>
+    </svg>
+  );
+}
+
 export function SeasonIcon({ size = 24, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
@@ -106,6 +119,42 @@ export function TerminalIcon({ size = 24, className }: IconProps) {
       <g>
 <path d="M3 4H21C21.5304 4 22.0391 4.21071 22.4142 4.58579C22.7893 4.96086 23 5.46957 23 6V18C23 18.5304 22.7893 19.0391 22.4142 19.4142C22.0391 19.7893 21.5304 20 21 20H3C2.46957 20 1.96086 19.7893 1.58579 19.4142C1.21071 19.0391 1 18.5304 1 18V6C1 5.46957 1.21071 4.96086 1.58579 4.58579C1.96086 4.21071 2.46957 4 3 4ZM5.2 8.2L8 11L5.2 13.8L6.8 15.4L11.2 11L6.8 6.6L5.2 8.2ZM12 16H18V14H12V16Z" fill="currentColor"/>
 </g>
+    </svg>
+  );
+}
+
+// Copy and its success state. Not Figma masters — the comps draw a text button
+// here, and these are the standard 24px marks for the two states, drawn on the
+// same grid as the eleven above so they line up with them.
+export function CopyIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <path
+        d="M16 1H4C2.9 1 2 1.9 2 3V17H4V3H16V1ZM19 5H8C6.9 5 6 5.9 6 7V21C6 22.1 6.9 23 8 23H19C20.1 23 21 22.1 21 21V7C21 5.9 20.1 5 19 5ZM19 21H8V7H19V21Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function CheckIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <path d="M9 16.17L4.83 12L3.41 13.41L9 19L21 7L19.59 5.59L9 16.17Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+// The GitHub mark. Not a Figma master — it is a third-party wordmark shape,
+// reproduced here at the same 24px grid so a repo link reads as a repo link
+// instead of printing a raw URL.
+export function GithubIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <path
+        d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.339-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.679.919.679 1.852 0 1.336-.012 2.415-.012 2.743 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }

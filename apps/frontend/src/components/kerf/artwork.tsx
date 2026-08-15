@@ -7,6 +7,14 @@
 
 import type { Tier } from '@kerf/shared';
 
+// INVARIANT for anyone adding artwork here: every badge and league master's
+// viewBox is SQUARED ON ITS OWN INK (bounding box + 7% each side), not left at
+// the exporter's 512x512 canvas. Without that, `size` sizes the canvas rather
+// than the drawing, and the same prop renders wildly different marks — the set
+// used to range from 28% to 87% ink coverage, so `clean-run` at size 22 drew
+// 6.6px of ink beside `steady-hand`'s 19.2px. Illustrations stay 320x240 and
+// bleed to the frame; Illustration() reserves its box from that 4:3 ratio.
+
 const LEAGUE_FILE: Record<Tier, string> = {
   Bronze: 'bronze',
   Silver: 'silver',
@@ -47,7 +55,21 @@ export function BadgeArt({ id, size, className }: { id: string; size: number; cl
 // Product illustrations. Figma note: "Preserve aspect ratio and do not add text
 // inside the master" — every master is 320x240, so callers pass a width and the
 // height follows from the 4:3 box.
-export type IllustrationName = 'empty-season' | 'cli-sync' | 'live-activity' | 'insights' | 'publish-project';
+export type IllustrationName =
+  | 'empty-season'
+  | 'cli-sync'
+  | 'live-activity'
+  | 'insights'
+  | 'publish-project'
+  // Live-card activity art, keyed off what a session is mostly doing.
+  | 'activity-building'
+  | 'activity-debugging'
+  | 'activity-reading'
+  | 'activity-exploring'
+  // Stands in for a project's logo when it has none.
+  | 'project-fallback'
+  // The right half of Home's Skill of the Day card.
+  | 'skill-spotlight';
 
 export function Illustration({
   name,

@@ -12,12 +12,13 @@ function applyTheme(theme: Theme) {
   document.documentElement.style.colorScheme = theme;
 }
 
-export function ThemeToggle() {
+/** `iconOnly` is the top-bar shape: a square button with an accessible name. */
+export function ThemeToggle({ iconOnly = false }: { iconOnly?: boolean }) {
   const [theme, setTheme] = useState<Theme>('dark');
 
-  // The pre-paint script in the root layout has already put the right class on
-  // <html>; read it back rather than re-deciding, or the two disagree for one
-  // frame and the page flashes the other palette.
+  // Dark is the default (see theme-script.ts). The pre-paint script has already
+  // put the right class on <html>; read it back rather than re-deciding, or the
+  // two disagree for one frame and the page flashes the other palette.
   useEffect(() => {
     setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
   }, []);
@@ -29,10 +30,21 @@ export function ThemeToggle() {
     applyTheme(next);
   }
 
+  const label = theme === 'dark' ? 'Use light mode' : 'Use dark mode';
+  const Icon = theme === 'dark' ? SunIcon : MoonIcon;
+
+  if (iconOnly) {
+    return (
+      <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label={label} title={label}>
+        <Icon />
+      </Button>
+    );
+  }
+
   return (
     <Button variant="ghost" size="sm" onClick={toggle} className="w-full justify-start">
-      {theme === 'dark' ? <SunIcon data-icon="inline-start" /> : <MoonIcon data-icon="inline-start" />}
-      <span>{theme === 'dark' ? 'Use light mode' : 'Use dark mode'}</span>
+      <Icon data-icon="inline-start" />
+      <span>{label}</span>
     </Button>
   );
 }
