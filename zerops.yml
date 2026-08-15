@@ -52,9 +52,13 @@ zerops:
         # for — see auth.ts's clerkAuthorizedParties(). Without this, a Clerk
         # session JWT valid for this instance is accepted here regardless of
         # which site presented it, and the wildcard CORS origin below makes
-        # that a reachable path rather than a theoretical one. e.g.
-        # https://kerf.example.com
-        CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES}
+        # that a reachable path rather than a theoretical one. Same same-name
+        # self-reference bug as CLERK_SECRET_KEY above (verified live: with
+        # the name unchanged, Clerk rejected every token with "Invalid JWT
+        # Authorized party claim (azp) ... Expected ${CLERK_AUTHORIZED_PARTIES}"
+        # — the literal unresolved string, not a real origin) — same fix,
+        # a differently-named service-level secret.
+        CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES_VALUE}
         # Optional. Without it the GitHub proxy uses the anonymous 60 req/hr/IP
         # budget, which the 10-minute cache makes workable; with it, 5000/hr.
         # Runtime only — putting a secret in build.envVariables bakes it into
