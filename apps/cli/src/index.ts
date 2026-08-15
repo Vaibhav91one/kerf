@@ -96,7 +96,7 @@ function usage(message: string, commandName?: string): never {
 }
 
 const DEFAULT_API_URL = 'https://backend-2cf9-3000.prg1.zerops.app';
-const DEFAULT_DASHBOARD_URL = 'https://frontend-2cf9-3000.prg1.zerops.app';
+const DEFAULT_DASHBOARD_URL = 'https://kerf.vaibhav.quest';
 const CONFIG_PATH = process.env.KERF_CONFIG ?? process.env.KERF_CONFIG_PATH ?? join(homedir(), '.kerf', 'config.json');
 
 type KerfConfig = {
