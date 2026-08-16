@@ -40,7 +40,13 @@ import { CliStatus } from '@/components/kerf/cli-status';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 
-type NavItem = { title: string; url: string; icon: typeof HomeIcon; match?: (p: string) => boolean };
+type NavItem = {
+  title: string;
+  url: string;
+  icon: typeof HomeIcon;
+  match?: (p: string) => boolean;
+  newTab?: boolean;
+};
 
 const PLATFORM: NavItem[] = [
   { title: 'Home', url: '/', icon: HomeIcon },
@@ -58,16 +64,19 @@ const BUILD_IN_PUBLIC: NavItem[] = [
 ];
 
 // /docs is its own Fumadocs-powered subsite with its own chrome (see
-// src/app/docs/layout.tsx) — clicking this is a real navigation away from
-// the dashboard shell, not a route rendered inside it.
-const REFERENCE: NavItem[] = [{ title: 'Docs', url: '/docs', icon: DocsIcon, match: (p) => p.startsWith('/docs') }];
+// src/app/docs/layout.tsx) — opened in a new tab rather than navigated to in
+// place, since leaving would otherwise abandon whatever the dashboard tab was
+// doing (a live session, an in-progress form) to land on an unrelated shell.
+const REFERENCE: NavItem[] = [
+  { title: 'Docs', url: '/docs', icon: DocsIcon, match: (p) => p.startsWith('/docs'), newTab: true },
+];
 
 function NavRow({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
-        render={<Link href={item.url} />}
+        render={<Link href={item.url} target={item.newTab ? '_blank' : undefined} rel={item.newTab ? 'noopener noreferrer' : undefined} />}
         isActive={active}
         className="h-[40px] gap-3 rounded-[10px] px-3 text-[16px] text-muted-foreground transition-colors hover:bg-sidebar-accent/40 hover:text-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-accent-foreground"
       >
