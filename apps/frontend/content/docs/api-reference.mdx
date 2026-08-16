@@ -1,0 +1,82 @@
+---
+title: API reference
+description: All 42 routes, grouped by who's allowed to call them.
+---
+
+The backend's route table lives in `apps/backend/src/index.ts` and carries the same guard table this
+page is generated from. Three invariants make the guard columns safe, and they're worth stating up
+front because every route below relies on them:
+
+1. The authenticated handle always comes from the Clerk session or the API token — never from a
+   request body, param, or query string.
+2. Every owner-scoped mutation puts `handle` in its `WHERE` clause, so a delete that matches nothing
+   is a 404 rather than someone else's row.
+3. Every public read of a `Project` or a `Skill` passes through `visibleTo(viewer)` — the row set
+   narrows, never the field set. A private row is absent, not blanked.
+
+## Public reads
+
+No auth required.
+
+| Route | What it does |
+|---|---|
+| `GET /health` | Liveness *and* readiness — does a real DB round-trip |
+| `GET /api/season/current` | The monthly board: points, rank, badges, qualification |
+| `GET /api/live/stream` | SSE fan-out of live/chat/project/skill events |
+| `GET /api/live/sessions` | Snapshot of currently-live sessions |
+| `GET /api/profiles` | All profiles |
+| `GET /api/profiles/:handle` | One public profile: points, level, badges, streak, projects, skills |
+| `GET /api/skills` | Aggregated tool/skill usage, trending, skill-of-the-day |
+| `GET /api/projects` | Project list, visibility-narrowed |
+| `GET /api/projects/:id` | One project's detail |
+| `GET /api/projects/:id/activity` | 12-week activity timeline |
+| `GET /api/projects/:id/github` | Cached public GitHub repo facts |
+| `GET /api/skill-library` | Shared skills library, sortable by stars |
+| `GET /api/skill-library/:id` | One shared skill by id |
+| `GET /api/skill-library/by-slug/:slug` | One shared skill by slug |
+| `GET /api/chat` | Recent chat messages |
+| `GET /api/cli-login/:deviceCode` | CLI polls here for its minted token |
+| `GET /api/cli-login/user/:userCode/status` | Browser-side lookup by the code a human typed |
+| `POST /api/cli-login/start` | Starts the device-code login flow |
+| `POST /api/profiles` | Legacy account creation — **410s once Clerk is configured** |
+
+## Clerk session required
+
+Signed in via the browser.
+
+| Route | What it does |
+|---|---|
+| `GET /api/clerk/me` | Resolve the Clerk session to a Kerf profile |
+| `POST /api/clerk/profile` | Create or claim a profile (handle + display name) |
+| `POST /api/cli-login/user/:userCode/claim` | Approve a device code, mint an API token |
+
+## Member (API token or Clerk session)
+
+| Route | What it does |
+|---|---|
+| `POST /api/metrics` | Upload scored sessions (`kerf sync`) |
+| `POST /api/commits` | Replace a UTC month's commit count |
+| `POST /api/heartbeat` | Upsert an in-progress session (`kerf live`) |
+| `POST /api/chat` | Post a chat message |
+| `PATCH /api/me/profile` | Update display name, bio, avatar, links |
+| `PATCH /api/me/skill-visibility` | Toggle the public-skills switch and per-skill hides |
+| `GET /api/me/follows` | Your own follow list |
+| `POST /api/follows/:handle` | Toggle follow / unfollow |
+| `PATCH /api/follows/:handle` | Toggle the rival flag (max 3) |
+| `POST /api/projects` | Publish a project |
+| `PATCH /api/projects/:id` | Edit a project, owner-scoped |
+| `DELETE /api/projects/:id` | Unpublish, owner-scoped |
+| `POST /api/skill-library` | Publish a skill to the shared library |
+| `POST /api/skill-library/:id/star` | Toggle a star |
+| `PATCH /api/skill-library/:id` | Flip public/private, owner-scoped |
+| `DELETE /api/skill-library/:id` | Unpublish, owner-scoped |
+| `POST /api/skill-library/by-slug/:slug/install` | Bump install count (`kerf skill install`) |
+| `GET /api/me/sessions` | Your sessions, tool histogram, improvement tips |
+| `GET /api/me/tokens` | List your CLI credentials (id/label/date only) |
+| `DELETE /api/me/tokens/:id` | Revoke a CLI token |
+
+## What's not here
+
+There's no `event` route of any kind — no endpoint accepts a raw transcript event, a prompt, or a
+diff, because there's no table for one to land in. See [Privacy model](/docs/privacy) for the schema
+that every one of these routes validates against.

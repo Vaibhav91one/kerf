@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://frontend-2cf9-3000.prg1.zerops.app';
 
-const STATIC_ROUTES = ['/', '/live', '/season', '/people', '/projects', '/skills', '/privacy'];
+const STATIC_ROUTES = ['/', '/live', '/season', '/people', '/projects', '/skills', '/privacy', '/docs'];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = STATIC_ROUTES.map((path) => ({

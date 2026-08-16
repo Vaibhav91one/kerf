@@ -1,0 +1,14 @@
+{
+  "title": "Kerf Docs",
+  "pages": [
+    "index",
+    "getting-started",
+    "scoring",
+    "privacy",
+    "architecture",
+    "api-reference",
+    "data-model",
+    "design-decisions",
+    "changelog"
+  ]
+}

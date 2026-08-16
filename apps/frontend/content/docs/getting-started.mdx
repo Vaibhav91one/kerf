@@ -1,0 +1,64 @@
+---
+title: Getting started
+description: Install the CLI, connect your account, and upload your first sessions.
+---
+
+## Install
+
+```bash
+npm i -g kerf
+```
+
+## Connect
+
+```bash
+kerf login
+```
+
+Opens the dashboard in your browser and asks you to type a short code — the same device-code flow
+GitHub CLI and similar tools use (RFC 8628). Once approved, the CLI stores an API token locally at
+`~/.kerf/config.json`. `kerf logout` removes it.
+
+## Upload your history
+
+```bash
+kerf sync
+```
+
+Walks your local Claude Code transcripts (`~/.claude/projects`) and Codex sessions
+(`~/.codex/sessions`), scores each one, and uploads the scores. It also does a best-effort local
+`git log` walk to count commits toward the monthly season floor — see [Privacy](/docs/privacy) for
+exactly what that does and doesn't send.
+
+Only sessions that clear a small floor — a handful of human turns and at least one edit that
+stuck — score anything; everything else uploads as a zero and stays effectively invisible.
+
+## Stay live while you work
+
+```bash
+kerf live
+```
+
+Sends a heartbeat every 15 seconds for whichever session is currently in progress, which is what
+lights up a small tile on the `/live` feed. Stop the command (or stop working) and the tile
+disappears within about a minute — there's no persistent "online" state beyond that.
+
+## Everyday use
+
+Run `kerf sync` whenever you want your score current — after a session, at the end of the day,
+however often you like. It's safe to run repeatedly; re-uploading a session you've already sent just
+overwrites the same row with the same numbers.
+
+## Publishing, opt-in
+
+These make a network call and publish something — everything else above is local-only or scores:
+
+```bash
+kerf skills                          # list what's on this machine — no network call
+kerf skills publish <slug> [--private]
+
+kerf projects                        # list projects you've worked in — no network call
+kerf projects publish [--name <name>] [--repo <url>] [--private]
+```
+
+Run `kerf help` for the full command reference at any time.

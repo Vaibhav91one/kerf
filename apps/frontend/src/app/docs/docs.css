@@ -1,0 +1,39 @@
+/* Fumadocs' own theme layer, imported ONLY by app/docs/layout.tsx (Next
+   scopes a layout-local CSS import to that route subtree) so it never loads
+   on any other page. Retheme'd onto Kerf's existing tokens (globals.css)
+   rather than left at Fumadocs' default neutral palette, so /docs reads as
+   the same product instead of an embedded third-party site. */
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+:root {
+  --color-fd-background: var(--background);
+  --color-fd-foreground: var(--foreground);
+  --color-fd-card: var(--card);
+  --color-fd-card-foreground: var(--card-foreground);
+  --color-fd-popover: var(--card);
+  --color-fd-popover-foreground: var(--card-foreground);
+  --color-fd-border: var(--border);
+  --color-fd-ring: var(--ring);
+  --color-fd-primary: var(--primary);
+  --color-fd-primary-foreground: var(--primary-foreground);
+  --color-fd-secondary: var(--secondary);
+  --color-fd-secondary-foreground: var(--secondary-foreground);
+  --color-fd-muted: var(--muted);
+  --color-fd-muted-foreground: var(--muted-foreground);
+  --color-fd-accent: var(--sidebar-accent);
+  --color-fd-accent-foreground: var(--sidebar-accent-foreground);
+}
+
+/* docs.css's own `@import 'tailwindcss'` re-runs Preflight, which resets
+   body's font-family back to Tailwind's default system stack — overriding
+   the SUSE font the root layout already set on <html> via next/font's
+   --font-suse custom property. Restated explicitly so /docs doesn't read in
+   a different typeface than the rest of the app. */
+body {
+  font-family: var(--font-suse), ui-sans-serif, system-ui, sans-serif;
+}
+code, pre, kbd, samp {
+  font-family: var(--font-suse-mono), ui-monospace, monospace;
+}

@@ -1,0 +1,76 @@
+---
+title: Privacy model
+description: Two ingress paths, and why the distinction is load-bearing.
+---
+
+For the plain-English version of what this means for you, see [What leaves your machine](/privacy)
+in the running app. This page is the engineering explanation underneath it.
+
+## Two paths, deliberately kept separate
+
+**Path A — telemetry.** `POST /api/metrics` and `POST /api/heartbeat`. Only hashes, enums,
+timestamps, and numbers may leave your machine. No free-text strings, ever. The one place a name
+appears is a `toolCounts` key (a skill or tool slug, never its arguments) — bounded to 240 keys per
+payload so this is a size limit, not an information-type exception.
+
+Every payload is schema-walked against the exact shape it's allowed to have. **Fails closed**: an
+unknown field doesn't get stripped and stored, it rejects the whole item. Accepting an unexpected
+string field silently would be a privacy bug, not a validation nicety, so there's no silent-strip
+code path at all.
+
+**Path B — user-authored content.** Profiles, projects, chat, shared skills. Free text is allowed
+here *because a human typed it into a form and chose to publish it*. Sanitised (length caps,
+control-character and bidi stripping, `http(s)`-only repo URLs) but genuinely free text, because
+that's the entire point of a bio or a project description.
+
+**No code path may populate a Path B column from a transcript.** A project's name is authored; its
+link to a real local project (via a hash of the path) is derived; the two connect only through a
+deliberate publish action by the person who owns both. That boundary is the whole privacy model —
+everything else is enforcement detail.
+
+## What a payload can actually contain
+
+Path A's entire vocabulary, in schema order:
+
+```
+sessionId · projectHash · startedMs · endedMs · turns · edits ·
+editsRework · reworkRatio · qualifies · toolCounts
+```
+
+Numbers, timestamps, enums, and hashes. That's the complete list — nothing else is a legal field on
+this path, at any version.
+
+## Path B's limits
+
+Free text is capped, not unlimited, even though a human typed it:
+
+| Field | Limit |
+|---|---|
+| Handle | 32 chars |
+| Display name | 48 chars |
+| Bio | 280 chars |
+| Project name | 64 chars |
+| Project description | 500 chars |
+| Repo / logo / avatar / social URL | 200–300 chars |
+| Chat message | 500 chars |
+| Skill name | 64 chars |
+| Skill description | 300 chars |
+| Skill content | 8,000 chars |
+
+Bidi Unicode overrides are stripped along with control characters — an unstripped right-to-left
+override character is enough to make a chat message or a bio display as a different string than what
+was actually typed, which matters once that text renders on someone else's screen.
+
+## Existence, not blanking
+
+A private `Project` or `Skill` row is **absent** from every list, detail page, and search result —
+not greyed out, not blanked. Asking for one by id or slug that exists but is private answers exactly
+the same way as asking for one that never existed at all. The alternative — returning a 404 for a
+truly-missing id but a 200-with-blanked-fields for a private one — would let anyone probe for which
+ids exist, a small but real information leak this design closes by construction.
+
+## Sessions stay with their owner
+
+`GET /api/profiles/:handle` never serves per-session detail for anyone else's account. A visitor to
+your profile sees your standing, your badges, and whatever you've published — never the individual
+sessions behind them. That table exists only on your own account.

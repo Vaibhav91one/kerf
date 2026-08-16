@@ -26,6 +26,7 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import {
+  DocsIcon,
   HomeIcon,
   KerfLogo,
   LiveIcon,
@@ -55,6 +56,11 @@ const BUILD_IN_PUBLIC: NavItem[] = [
   { title: 'Skills', url: '/skills', icon: SkillsIcon },
   { title: 'People', url: '/people', icon: PeopleIcon, match: (p) => p.startsWith('/people') || p.startsWith('/u/') },
 ];
+
+// /docs is its own Fumadocs-powered subsite with its own chrome (see
+// src/app/docs/layout.tsx) — clicking this is a real navigation away from
+// the dashboard shell, not a route rendered inside it.
+const REFERENCE: NavItem[] = [{ title: 'Docs', url: '/docs', icon: DocsIcon, match: (p) => p.startsWith('/docs') }];
 
 function NavRow({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
@@ -116,6 +122,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent className="gap-[26px] px-0 pt-4">
         <NavGroup label="PLATFORM" items={PLATFORM} pathname={pathname} />
         <NavGroup label="BUILD IN PUBLIC" items={BUILD_IN_PUBLIC} pathname={pathname} />
+        <NavGroup label="REFERENCE" items={REFERENCE} pathname={pathname} />
       </SidebarContent>
 
       <SidebarFooter className="gap-0 px-3 pb-6 pt-0">

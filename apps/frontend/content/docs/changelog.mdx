@@ -1,0 +1,64 @@
+---
+title: Changelog
+description: A curated build history — the full diary lives in BUILD_LOG.md.
+---
+
+This is a curated subset. The complete, warts-and-all build log is
+[BUILD_LOG.md](https://github.com/Vaibhav91one/kerf/blob/master/BUILD_LOG.md) in the repo.
+
+## Foundations
+
+Monorepo scaffolded as pnpm workspaces with no build step in `packages/shared` or `apps/cli`
+(`allowImportingTsExtensions`), Express + Prisma + Postgres on the backend, Next.js on the frontend.
+The extractor was verified end-to-end against a real, full-size Claude Code corpus before any UI
+existed — the numbers had to be trustworthy before there was anywhere to show them.
+
+## The dashboard becomes a game
+
+The original scope was a numbers-only insights view. It expanded into the current shape — Home,
+Live, Season, Rivals, Projects, Skills, People — once leveling, badges, and build-in-public surfaces
+were added. The Material 3 wireframes were rebuilt to match, and the FigJam architecture diagrams
+were split into dedicated pages for the new shape.
+
+## Points and levels replace the raw ratio
+
+The season system originally ranked on a raw rework ratio next to a percentile cutoff — accurate,
+unreadable. `packages/shared/src/points.ts` replaced it with points and fixed-threshold levels
+(Bronze → Diamond), a deliberate exception to "never rank on a total" — see
+[Design decisions](/docs/design-decisions) for the reasoning and the counters that ship with it.
+
+## Readability pass and the first privacy page
+
+Real skill and MCP server names started appearing on `/skills` instead of raw tool identifiers, the
+whole type scale was raised roughly 15% for legibility, and twenty scattered explanatory sentences
+about what leaves your machine were consolidated into one dedicated `/privacy` page — the one every
+other screen now links to instead of restating.
+
+## Home stops being the board
+
+Home and `/season` used to render the same standings table. They split: Home became about you and
+the room (your rank, your badges, what's trending, who's live); `/season` kept the full board. Badges
+gained real progress readouts instead of a flat earned/not-earned state, and the GitHub proxy shipped
+with its SSRF guard verified against real attack inputs, not just the happy path.
+
+## Production hardening
+
+Toasts started firing on every action that previously changed a number with no visible signal. The
+CLI gained a real `--help`/usage table shared between `kerf help` and every error path, after a bug
+was found where an unknown command silently fell through to the dry run. `ConfirmDialog` and a shared
+`Spinner` replaced three inline copies of the same pattern.
+
+## Real domain, production auth
+
+The dashboard moved off its Zerops-assigned subdomain onto `kerf.vaibhav.quest`, and Clerk moved from
+a development instance (a shared, capped OAuth setup) to a real production instance with its own
+Google OAuth credentials and DNS-verified email sending. Along the way, a recurring Zerops
+configuration bug was found and fixed three times: a `zerops.yml` environment variable declared as
+`KEY: ${KEY}` never resolves at runtime, because the same-named declaration collides with itself —
+the fix is always a differently-named service-level secret.
+
+## This site
+
+The `/docs` you're reading now, and a redesigned favicon, README, and social-share image, shipped
+after the production move — the last pieces that make the project legible to someone arriving from
+outside the dashboard for the first time.

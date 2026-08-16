@@ -1,0 +1,67 @@
+---
+title: Design decisions
+description: A few choices worth explaining, straight from the code that makes them.
+---
+
+Several files in this codebase carry design-doc-grade comments explaining a choice that wasn't
+obvious. This page collects the ones worth reading even if you never open the source.
+
+## A private row is absent, never blanked
+
+`apps/backend/src/visibility.ts` is a single function, and it's the one narrowing point for every
+public read of a `Project` or a `Skill`:
+
+```ts
+export function visibleTo(viewer: string | null) {
+  return viewer === null
+    ? { isPublic: true }
+    : { OR: [{ isPublic: true }, { handle: viewer }] };
+}
+```
+
+The alternative — serve the row but blank its fields when it's private — would still answer `200`
+for an id that exists and `404` for one that doesn't. That's an existence oracle: anyone could probe
+ids to learn which ones are real, private or not. Narrowing the *row set* instead of the *field set*
+means a private row is indistinguishable from one that was never published at all.
+
+## Commit counts are replaced, never incremented
+
+`apps/cli/src/git.ts` recomputes an entire UTC month's commit count from local git on every
+`kerf sync`, and uploads the total — not a delta. That one choice resolves several edge cases at
+once:
+
+- **Re-running sync is free.** Running it ten times can't inflate the count, because each run
+  recomputes and overwrites the same answer.
+- **Multi-repo and multi-clone are a non-issue.** The count is a set union of commit hashes locally,
+  so a commit reachable from two clones of the same repo counts once.
+- **Attribution is per-repo**, not global — `git config user.email` is read separately for each repo
+  walked, because people genuinely use different emails for work and personal projects.
+
+An incrementing endpoint would need the *server* to remember which commit hashes it had already
+seen — which means uploading hashes, which the privacy model doesn't allow. Replace-not-increment
+sidesteps that entirely: only an integer ever leaves the machine.
+
+## Points is a deliberate exception to "never rank on a total"
+
+The original design principle for the season system was that ranking should never be a raw
+cumulative total, because totals reward volume over quality. Levels (Bronze → Diamond) are exactly
+that kind of total, shipped anyway because leveling was worth having — on the condition that it
+comes with real counters against the obvious abuse (see [Scoring and levels](/docs/scoring) for the
+three of them). Badges stay ratio- and consistency-based regardless — "ran 100 sessions" is
+deliberately absent as a badge, because that would be a second, undocumented total living right next
+to the one that's already been justified.
+
+## Follow and Rivals are one table
+
+A rival is, by definition, someone you already follow — so `Follow` carries both a
+`[followerHandle, followeeHandle]` edge and an `isRival` boolean, rather than a second table that
+would need its own foreign key back into the first just to say "this follow is also a rival." Fully
+public, no visibility flag: a follow edge carries zero free text, so there's nothing on it that could
+need hiding.
+
+## Global search picks a fixed calendar window, not a rolling one
+
+"Trending this week" and "skill of the day" both read a plain 7-day window rather than a
+week-over-week delta. A delta needs last week's snapshot stored somewhere to compare against — one
+more thing to persist for a number that's shown once and forgotten. A window over already-stored
+session timestamps needs nothing extra.

@@ -1,0 +1,74 @@
+---
+title: Scoring and levels
+description: How a session becomes a number, and why points instead of a raw ratio.
+---
+
+Everything below is a description of `packages/shared/src/points.ts` — that file is the real source
+of truth; this page is a snapshot of it, not a separate spec that could drift.
+
+## Three terms, per session
+
+A qualifying session (see the floor below) earns points from three terms, each rewarding a
+different thing:
+
+| Term | What it rewards |
+|---|---|
+| **Landed** | Edits that stuck, on a log scale — a 200-edit session can't bury a careful 20-edit one. |
+| **Precision** | The share of edits that landed first try. The dominant term, on purpose. |
+| **Focus** | Net edits landed per turn, capped at 3/turn — one giant write hits the ceiling instead of running away with the score. |
+
+```
+netEdits  = edits - editsRework
+landed    = round(10 * log2(1 + netEdits))
+precision = round(30 * (1 - reworkRatio))
+focus     = round(20 * min(1, (netEdits / turns) / 3))
+
+sessionPoints = min(120, landed + precision + focus)
+```
+
+A session that doesn't qualify — fewer than 3 human turns, or zero edits that stuck — scores `0`
+outright. It still uploads (so the CLI's "N sessions parsed" count is honest), it just contributes
+nothing.
+
+## Totals and caps
+
+Points sum across sessions, but each UTC calendar day is capped at 300 points before it's added to
+your total. Two numbers matter:
+
+- **Lifetime total** → your **level** (Bronze → Silver → Gold → Platinum → Diamond), which never
+  resets.
+- **This month's total** → your rank on the [Season](/season) board, which resets every UTC
+  calendar month.
+
+They're genuinely different numbers on purpose — a big lifetime total can sit at Gold while this
+month's total is small, and that's not a bug, it's two different questions being answered.
+
+## Why points instead of a raw ratio
+
+The scoring engine underneath all of this is still the "rework ratio" idea — the share of edits that
+had to be redone. Earlier, the app showed that ratio directly (`0.369`) next to a percentile cutoff
+(`p20 cut is 0.31`) — accurate, but not readable to a visitor. Points and fixed-threshold levels are
+the same signal, translated into something you can look at for two seconds and understand.
+
+## Farming it doesn't work
+
+Any scoring system invites the question "how would someone game this," so the counters are built in
+rather than bolted on:
+
+1. **Non-qualifying sessions score zero.** Running the CLI more without doing real work doesn't
+   help.
+2. **Daily cap.** A bot loop plateaus at 300 points/day instead of compounding.
+3. **Sublinear volume, dominant precision.** The award per session grows slower than the edit count,
+   and the precision term is the biggest of the three — padding a session with volume barely moves
+   it.
+
+This is a deliberate, documented departure from the original design goal of "never rank on a
+cumulative total" — taken because leveling is worth having, on the condition that it ships with
+exactly these counters against the obvious way to abuse a total.
+
+## The season qualification floor
+
+Showing up on the monthly board at all requires **10 qualifying sessions and 5 commits** in the same
+UTC month — a `git commit --allow-empty` loop clears the second half for free, but the floor only
+gates *ranking eligibility*. It earns zero points on its own; the ten qualifying sessions still have
+to be real, honestly-scored sessions.

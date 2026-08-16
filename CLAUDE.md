@@ -64,7 +64,7 @@ edit it.
   `components/kerf/icons.tsx` (exported path data, `currentColor`); league crests, badges, avatars
   and illustrations are files under `public/kerf/` and are never recoloured. Routes: `/`, `/live`,
   `/people`, `/people/[handle]`, `/skills`, `/projects`, `/projects/[id]`, `/me`, `/season`, `/rivals`,
-  `/privacy`. A profile
+  `/privacy`, `/docs`. A profile
   lives at `/people/[handle]`; `/u/[handle]` stays as a redirect so links minted before the move
   keep working. `/people/[handle]` and `/projects/[id]` are each a thin server `page.tsx`
   (`generateMetadata` + a fetch for it) wrapping a `*-client.tsx` that does the actual interactive,
@@ -76,7 +76,17 @@ edit it.
   its consequence at the point of the click. `/cli/connect` lives inside the `(app)` group so `kerf login` lands in a dialog over
   the blurred dashboard rather than on a bare page. `/people` itself is the rail's People entry — the board draws the profile screen as
   its destination and no index, so the directory is deliberately plain. Do not invent routes beyond
-  these. Public-first: no frontend
+  these — **`/docs` is the one deliberate exception**, and it breaks two rules on purpose: it lives
+  outside the `(app)` route group with its own layout rather than nested in the single 260px rail
+  (see "Chrome" below), and it's powered by Fumadocs (`fumadocs-core`/`fumadocs-ui`/`fumadocs-mdx`,
+  `apps/frontend/content/docs/*.mdx`) instead of the hand-rolled zero-dependency UI everywhere else.
+  Both deviations were taken deliberately, after comparing against a hand-rolled single page, for
+  this one surface: real MDX content, a generated page tree, and static search were worth the four
+  new dependencies here, in exchange for `src/app/docs/docs.css` retheming Fumadocs' `--color-fd-*`
+  tokens onto Kerf's own palette (`src/app/globals.css`'s tokens) so it doesn't read as an embedded
+  third-party site. `src/app/layout.tsx` is untouched — Fumadocs' `RootProvider` wraps `{children}`
+  inside the nested `src/app/docs/layout.tsx`, not the root layout, since the root already owns
+  `<html>/<body>` (fonts, the theme script, `ClerkProvider`) and only one layout can. Public-first: no frontend
   Clerk proxy/middleware; sign-in is needed only for `/me`, CLI connect, and mutating actions.
 
 Run `pnpm install` once at the root. `pnpm -r typecheck` / `pnpm -r test` run across all packages.
@@ -287,7 +297,9 @@ mobile sheet, so the rail always occupies its 260px. Each screen's primary actio
 "Publish a skill") sits on its own `PageHeader` row via the `action` prop, and is **never disabled**
 — signed out it opens the Clerk modal. `PageHeader` draws no rule under itself. Theme switching
 lives on `/me` only. `/me` renders a sign-in gate (and opens the Clerk dialog) when signed out
-rather than showing controls that cannot work.
+rather than showing controls that cannot work. This rail is scoped to the `(app)` route group — `/docs`
+lives outside it, with its own Fumadocs chrome, precisely so it never has to fight this rail for
+space (see "Stack" above).
 
 ## Type scale
 

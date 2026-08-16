@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { createMDX } from "fumadocs-mdx/next";
 
 const nextConfig: NextConfig = {
   // The leak this closes is real and lives here, not on the API: a browser
@@ -16,4 +17,9 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Wraps the config with the fumadocs-mdx webpack/turbopack plugin so
+// content/docs/*.mdx compiles into the .source directory the /docs route
+// tree reads from — see lib/source.ts.
+const withMDX = createMDX();
+
+export default withMDX(nextConfig);

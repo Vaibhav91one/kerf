@@ -1,0 +1,39 @@
+---
+title: Overview
+description: A league for coding-agent CLI users, scored on what actually stuck.
+---
+
+**kerf** *(n.)* — the sliver of material a saw blade removes on its way through the wood. Not the
+plank, not the sawdust pile — the thin, honest trace of the cut itself.
+
+That's the bet this app makes: the most interesting signal in a coding-agent session was never
+"lines changed" or "commits shipped." It's the *kerf* — how much of what got written had to be cut
+away and redone. An agent that lands an edit clean on the first try is doing something a raw diff
+count can't see. Kerf scores that, turns it into points and levels, and never once asks to see what
+you actually typed.
+
+## What it does
+
+- **`kerf sync`** walks your local Claude Code (and Codex) transcripts, scores each session, and
+  uploads the score. Never the transcript.
+- **`kerf live`** heartbeats an in-progress session so a small tile lights up on the live feed while
+  you work — gone again within a minute of you stopping.
+- A dashboard — Home, Live, Season, Rivals, Projects, Skills, People — shows your standing, your
+  badges, and whatever you've chosen to publish. Nothing is public by default.
+- **Rivals** lets you follow up to three people and race them on the monthly board. **Projects** and
+  **Skills** are opt-in, build-in-public surfaces you turn on from a form, not a checkbox buried in
+  settings.
+
+## What Kerf is not
+
+It doesn't watch you work, and it isn't a productivity tracker. There's no keystroke logging, no
+screen recording, no "time in editor." A session either qualifies for scoring (a small floor: a
+handful of human turns, at least one edit that stuck) or it scores zero and is otherwise invisible.
+
+## Where to go next
+
+- [Getting started](/docs/getting-started) — install the CLI and connect it to your account.
+- [Scoring and levels](/docs/scoring) — how a session becomes a number, and why it's points instead
+  of a raw ratio.
+- [Privacy model](/docs/privacy) — exactly what leaves your machine, and what never does.
+- [Architecture](/docs/architecture) — the CLI → API → Postgres shape, and how the live feed works.

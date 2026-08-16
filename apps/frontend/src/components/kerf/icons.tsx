@@ -93,6 +93,19 @@ export function RivalsIcon({ size = 24, className }: IconProps) {
   );
 }
 
+// No Figma asset for this one either (Docs is new, not in the comps) — a
+// plain open book, same solid-fill/24x24 convention as the rest of this
+// file, following RivalsIcon's precedent for a hand-drawn addition.
+export function DocsIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <g>
+<path d="M11 4.5C9.5 3.4 7.4 3 5.5 3C4.4 3 3.3 3.15 2.5 3.5V17.5C3.3 17.15 4.4 17 5.5 17C7.4 17 9.5 17.4 11 18.5V4.5Z M13 4.5C14.5 3.4 16.6 3 18.5 3C19.6 3 20.7 3.15 21.5 3.5V17.5C20.7 17.15 19.6 17 18.5 17C16.6 17 14.5 17.4 13 18.5V4.5Z" fill="currentColor"/>
+</g>
+    </svg>
+  );
+}
+
 export function SeasonIcon({ size = 24, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={className}>

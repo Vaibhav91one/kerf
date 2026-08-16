@@ -1,0 +1,61 @@
+---
+title: Data model
+description: Eight Postgres tables, one hub, no event table.
+---
+
+`apps/backend/prisma/schema.prisma` — `Profile` is the hub; everything else cascades from it. Two
+absences are as deliberate as anything present: **no `season` table** (points and rank are computed
+live on read, never stored) and **no `event` table** (raw transcript events never leave your
+machine, so there's no schema for one to land in).
+
+## Profile
+
+The account itself. `handle` is the primary key. Holds display fields (`displayName`, `bio`, avatar
+and social links), the `publicSkills` switch and `hiddenSkills` list, and the sha256 `tokenHash` for
+the legacy single-token flow — a leaked database dump has to be a set of hashes, never a set of
+usable keys.
+
+## SessionMetric
+
+One row per scored session. Primary key is `[handle, sessionId]` — composite on purpose, so one
+account can never overwrite another account's row by guessing a session id. Holds `turns`, `edits`,
+`editsRework`, `reworkRatio`, `qualifies`, and a `toolCounts` JSON blob of skill/tool names to
+counts. This is Path A telemetry end to end — see [Privacy model](/docs/privacy).
+
+## LiveSession
+
+The ephemeral twin of `SessionMetric`, upserted by `kerf live`'s heartbeat. No history — just
+whether a session is still going, and how it's doing on the same counters. Indexed on `lastBeatMs`
+so a stale row is cheap to filter out of the live feed.
+
+## Project
+
+An opt-in, published project. `isPublic` defaults to `true`, which *is* the backfill: publishing is
+opt-in, privacy is opt-in on top of that. `projectHash` is the optional bridge to real session data
+— a project can exist purely as an authored name with no linked sessions at all.
+
+## Skill
+
+An entry in the shared skills library. `slug` is globally unique (a small, accepted trade-off — it
+means slug availability is a one-bit oracle, in exchange for `kerf skill install <slug>` needing
+only a slug, not a handle-qualified path). `content` caps at 8,000 characters.
+
+## SkillStar
+
+A join table, `[skillId, handle]` as its primary key — nothing else on it.
+
+## Follow
+
+One table serves both following and rivals: `[followerHandle, followeeHandle]` plus an `isRival`
+boolean, because a rival is by definition someone you already follow. Fully public — a follow edge
+carries no free text, so there's no visibility flag to check.
+
+## CommitCount
+
+`[handle, monthStartMs]` → an integer. Replaced wholesale on every `kerf sync`, never incremented —
+see [Architecture](/docs/architecture) and [Design decisions](/docs/design-decisions) for why that
+one choice is what keeps re-running sync safe.
+
+## ChatMessage
+
+`handle`, `body`, `createdAt`. The simplest table in the schema, on purpose.
